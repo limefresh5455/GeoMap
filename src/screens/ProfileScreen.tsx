@@ -91,6 +91,25 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     },
   });
 
+  // 5. Delete Current Location Mutation
+  const deleteLocationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.delete('/locations/current');
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['locationsHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+      queryClient.invalidateQueries({ queryKey: ['authBalance'] });
+      Alert.alert('Success', 'Current location deleted successfully.');
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'Failed to delete current location.';
+      Alert.alert('Error', message);
+      console.error(error);
+    },
+  });
+
   // Helpers to resolve nested structure if backend wraps response inside `data` property
   const meData = meRaw?.data || meRaw;
   const balanceData = balanceRaw?.data || balanceRaw;
@@ -106,6 +125,21 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         onPress: () => logoutMutation.mutate(),
       },
     ]);
+  };
+
+  const handleDeleteCurrentLocation = () => {
+    Alert.alert(
+      'Delete Location',
+      'Are you sure you want to delete your current location?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteLocationMutation.mutate(),
+        },
+      ]
+    );
   };
 
   const handleRefreshAll = () => {
@@ -156,20 +190,33 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         </Text>
         <Text style={styles.historyTime}>{formatDate(item.created_at)}</Text>
       </View>
-      <View
-        style={[
-          styles.sourceBadge,
-          { backgroundColor: item.source === 'gps' ? '#eef2ff' : '#f0f9ff' },
-        ]}
-      >
-        <Text
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View
           style={[
-            styles.sourceText,
-            { color: item.source === 'gps' ? '#4f46e5' : '#0369a1' },
+            styles.sourceBadge,
+            { backgroundColor: item.source === 'gps' ? '#eef2ff' : '#f0f9ff' },
           ]}
         >
-          {item.source || 'manual'}
-        </Text>
+          <Text
+            style={[
+              styles.sourceText,
+              { color: item.source === 'gps' ? '#4f46e5' : '#0369a1' },
+            ]}
+          >
+            {item.source || 'manual'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={handleDeleteCurrentLocation}
+          style={styles.deleteIconButton}
+          disabled={deleteLocationMutation.isPending}
+        >
+          {deleteLocationMutation.isPending ? (
+            <ActivityIndicator size="small" color="#ef4444" />
+          ) : (
+            <Icon name="trash-outline" size={20} color="#ef4444" />
+          )}
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -564,6 +611,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  deleteIconButton: {
+    padding: 8,
+    marginLeft: 4,
   },
   logoutButton: {
     flexDirection: 'row',
