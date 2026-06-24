@@ -10,6 +10,7 @@ import {
   FlatList,
   Platform,
   PermissionsAndroid,
+  Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
@@ -74,7 +75,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   });
 
   const { mutate, isPending } = useMutation({
-    onMutate: async ({
+    mutationFn: async ({
       latitude,
       longitude,
       label,
@@ -83,26 +84,24 @@ export default function SetManualLocationScreen({ navigation }: Props) {
       longitude: number;
       label: string;
     }) => {
-      try {
-        const response = await api.put('/locations/manual', {
-          latitude,
-          longitude,label
-        });
-        navigation.navigate('Nearby');
-        return response?.data
-      } catch (error:any) {
-        console.log('Error updating manual location', error?.response);
-        throw error;
-      }
+      const response = await api.put('/locations/manual', {
+        latitude,
+        longitude,
+        label,
+      });
+      return response?.data;
     },
     onSuccess: () => {
       refetch();
-      query.invalidateQueries({queryKey:['NearbyPlaces']});
-      query.invalidateQueries({queryKey:['GetSavedLocation']});
-      query.invalidateQueries({queryKey:['locationsHistory']});
+      query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
+      query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+      query.invalidateQueries({ queryKey: ['locationsHistory'] });
       navigation.navigate('Nearby');
     },
-    onError: () => {
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || error.message || 'Failed to update manual location';
+      Alert.alert('Error', message);
+      console.log('Error updating manual location', error?.response);
       fallbackToGPS();
     },
   });

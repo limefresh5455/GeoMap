@@ -21,28 +21,41 @@ export default function HomeScreen({ navigation }: Props) {
   const query = useQueryClient();
 
 
-  const {mutate,isPending}=useMutation({
-    mutationFn: async ({latitude,longitude,accuracy}:{latitude:number,longitude:number,accuracy?:number}) => {
-        try {
-          // Sync with backend in the background
-         const response = await api.post('/locations/gps', { latitude, longitude, accuracy });
-         return response.data
-        } catch (error:any) {
-          const message=error?.response ??error
-          console.log('Error saving location to backend:', message);
-          throw error
-        }
+  const { mutate, isPending } = useMutation({
+    mutationFn: async ({
+      latitude,
+      longitude,
+      accuracy,
+    }: {
+      latitude: number;
+      longitude: number;
+      accuracy?: number;
+    }) => {
+      try {
+        // Sync with backend in the background
+        const response = await api.post('/locations/gps', {
+          latitude,
+          longitude,
+          accuracy,
+        });
+        return response.data;
+      } catch (error: any) {
+        console.log('Error saving location to backend:', error?.response ?? error);
+        throw error;
+      }
     },
-    onSuccess:()=>{
+    onSuccess: () => {
       refetch();
-      query.invalidateQueries({queryKey:['NearbyPlaces']});
-      query.invalidateQueries({queryKey:['GetSavedLocation']});
-      query.invalidateQueries({queryKey:['locationsHistory']});
+      query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
+      query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+      query.invalidateQueries({ queryKey: ['locationsHistory'] });
       navigation.navigate('Nearby');
-    }
-    
-    
-  })
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || error.message || 'Failed to save location';
+      Alert.alert('Error', message);
+    },
+  });
 
   const requestLocationPermission = async () => {
     setLoading(true);
