@@ -91,20 +91,20 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     },
   });
 
-  // 5. Delete Current Location Mutation
-  const deleteLocationMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.delete('/locations/me');
+  // 5. Delete Location History Mutation
+  const deleteHistoryMutation = useMutation({
+    mutationFn: async (locationId: number) => {
+      const res = await api.delete(`/locations/current?location_id=${locationId}`);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locationsHistory'] });
       queryClient.invalidateQueries({ queryKey: ['GetSavedLocation'] });
       queryClient.invalidateQueries({ queryKey: ['authBalance'] });
-      Alert.alert('Success', 'Current location deleted successfully.');
+      Alert.alert('Success', 'Location history item deleted successfully.');
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.message || 'Failed to delete current location.';
+      const message = error?.response?.data?.message || 'Failed to delete history item.';
       Alert.alert('Error', message);
       console.error(error);
     },
@@ -127,16 +127,16 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     ]);
   };
 
-  const handleDeleteCurrentLocation = () => {
+  const handleDeleteHistory = (id: number) => {
     Alert.alert(
-      'Delete Location',
-      'Are you sure you want to delete your current location?',
+      'Delete History',
+      'Are you sure you want to delete this location history item?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteLocationMutation.mutate(),
+          onPress: () => deleteHistoryMutation.mutate(id),
         },
       ]
     );
@@ -207,11 +207,11 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           </Text>
         </View>
         <TouchableOpacity
-          onPress={handleDeleteCurrentLocation}
+          onPress={() => handleDeleteHistory(item.id)}
           style={styles.deleteIconButton}
-          disabled={deleteLocationMutation.isPending}
+          disabled={deleteHistoryMutation.isPending}
         >
-          {deleteLocationMutation.isPending ? (
+          {deleteHistoryMutation.isPending ? (
             <ActivityIndicator size="small" color="#ef4444" />
           ) : (
             <Icon name="trash-outline" size={20} color="#ef4444" />
