@@ -12,6 +12,8 @@ import SetManualLocationScreen from '../screens/SetManualLocationScreen';
 import PlaceDetailsScreen from '../screens/PlaceDetailsScreen';
 import AllPhotosScreen from '../screens/AllPhotosScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
+import AgentTravelChatScreen from '../screens/AgentTravelChatScreen';
+import CommuteScreen from '../screens/CommuteScreen';
 
 export type AuthStackParamList = {
   Initial: undefined;
@@ -40,6 +42,13 @@ export type AuthStackParamList = {
     placeName?: string;
     placeAddress?: string;
     placeId?:string
+  } | undefined;
+  AgentTravelChat: undefined;
+  Commute: {
+    placeId?: string;
+    destinationName?: string;
+    destinationLat?: number;
+    destinationLng?: number;
   } | undefined;
 };
 
@@ -88,6 +97,8 @@ export default function AuthNavigator() {
       <Stack.Screen name="PlaceDetails" component={PlaceDetailsScreen} />
       <Stack.Screen name="AllPhotos" component={AllPhotosScreen} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+      <Stack.Screen name="AgentTravelChat" component={AgentTravelChatScreen} />
+      <Stack.Screen name="Commute" component={CommuteScreen} />
     </Stack.Navigator>
   );
 }

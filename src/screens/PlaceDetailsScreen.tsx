@@ -175,9 +175,12 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
         <View style={styles.headerRight}>
           <TouchableOpacity
             onPress={() => {
-              if (google_maps_uri || data?.google_maps_uri) {
-                Linking.openURL(google_maps_uri || data?.google_maps_uri);
-              }
+              navigation.navigate('Commute', {
+                placeId,
+                destinationName: placeName || data?.display_name,
+                destinationLat: latitude || data?.latitude,
+                destinationLng: longitude || data?.longitude,
+              });
             }}
             style={styles.iconButton}>
             <Icon name="navigate" size={20} color="#111827" />

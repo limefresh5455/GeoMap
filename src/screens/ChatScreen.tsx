@@ -141,9 +141,17 @@ const ChatScreen = () => {
           <Icon name="chatbubbles" size={24} color="#ffffff" />
           <Text style={styles.headerTitle}>Geo Chat</Text>
         </View>
-        <TouchableOpacity style={styles.searchButton}>
-          <Icon name="search-outline" size={22} color="#ffffff" />
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity 
+            style={styles.agentButton}
+            onPress={() => navigation.navigate('AgentTravelChat')}>
+            <Icon name="airplane" size={20} color="#ffffff" />
+            <Text style={styles.agentButtonText}>AI Agent</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.searchButton}>
+            <Icon name="search-outline" size={22} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Sessions List */}
@@ -214,6 +222,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  agentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  agentButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   searchButton: {
     width: 40,

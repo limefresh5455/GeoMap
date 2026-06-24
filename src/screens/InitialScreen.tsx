@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity,  StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity,  StatusBar, Image } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,11 +21,12 @@ export default function InitialScreen({ navigation }: Props) {
             <View style={styles.circleMedium} />
             <View style={styles.circleSmall} />
             
-            {/* Custom Map Pin Graphic */}
-            <View style={styles.pinBody}>
-              <View style={styles.pinHole} />
-            </View>
-            <View style={styles.pinPoint} />
+            {/* App Logo Icon */}
+            <Image 
+              source={require('../assets/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
           </View>
           
           <Text style={styles.title}>GeoMap</Text>
@@ -100,35 +101,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  pinBody: {
-    width: 70,
-    height: 70,
-    backgroundColor: '#ffffff',
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logo: {
+    width: 100,
+    height: 100,
     zIndex: 2,
-    marginTop: -20,
-  },
-  pinHole: {
-    width: 24,
-    height: 24,
-    backgroundColor: '#2c1e6e',
-    borderRadius: 12,
-  },
-  pinPoint: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 20,
-    borderRightWidth: 20,
-    borderTopWidth: 40,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#ffffff',
-    marginTop: -15,
-    zIndex: 1,
   },
   title: {
     fontSize: 40,
