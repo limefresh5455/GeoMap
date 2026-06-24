@@ -19,7 +19,7 @@ import { api } from '../services/api';
 import Geolocation from 'react-native-geolocation-service';
 import Config from 'react-native-config';
 import axios from 'axios';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import CustomButton from '../components/Buttons/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -44,6 +44,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   const [selectedAddress, setSelectedAddress] = useState(
     'Move map or search to select location',
   );
+  const query = useQueryClient();
   const mapRef = useRef<MapView>(null);
 
   const { data, isLoading, refetch } = useQuery({
@@ -52,7 +53,6 @@ export default function SetManualLocationScreen({ navigation }: Props) {
       try {
         const response = await api.get('/locations/me');
         const data = response?.data?.data;
-        console.log(data,"THIS IS SAVED LOCATION>>>>>>>>>>>>>>>>>>+++++++++++++++++++++++++++++++")
 
         if (data && data.latitude && data.longitude) {
           setLocation({
@@ -97,6 +97,9 @@ export default function SetManualLocationScreen({ navigation }: Props) {
     },
     onSuccess: () => {
       refetch();
+      query.invalidateQueries({queryKey:['NearbyPlaces']});
+      query.invalidateQueries({queryKey:['GetSavedLocation']});
+      query.invalidateQueries({queryKey:['locationsHistory']});
       navigation.navigate('Nearby');
     },
     onError: () => {
@@ -247,19 +250,19 @@ export default function SetManualLocationScreen({ navigation }: Props) {
 
       {/* Map takes the full screen behind everything */}
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          initialRegion={{
-            latitude: location?.latitude || 0,
-            longitude: location?.longitude || 0,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
-          onMapReady={() => console.log('Google Maps is successfully ready')}
-        >
-          {location && (
+        {location ? (
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_GOOGLE}
+            style={styles.map}
+            initialRegion={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+            onMapReady={() => console.log('Google Maps is successfully ready')}
+          >
             <Marker
               coordinate={{
                 latitude: location.latitude,
@@ -277,8 +280,13 @@ export default function SetManualLocationScreen({ navigation }: Props) {
                 });
               }}
             />
-          )}
-        </MapView>
+          </MapView>
+        ) : (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#3b2c85" />
+            <Text style={styles.loadingText}>Loading Map...</Text>
+          </View>
+        )}
       </View>
 
       {/* Floating Header */}

@@ -5,6 +5,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import HomeScreen from '../screens/HomeScreen';
 import NearbyScreen from '../screens/NearbyScreen';
 import ChatScreen from '../screens/ChatScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -16,7 +17,6 @@ const PlaceholderScreen = ({ title }: { title: string }) => (
   </View>
 );
 
-const ProfileScreen = () => <PlaceholderScreen title="Profile" />;
 
 export default function HomeTabNavigator() {
   return (

@@ -51,9 +51,10 @@ export default function LoginScreen({ navigation, route }: Props) {
             throw new Error('Invalid response from server');
           }
       } catch (error: any) {
+        console.log(error?.response,"Error============>>>>>>>>")
         const errorMessage =
           error?.response?.data?.detail ||
-          error?.response?.data?.message ||
+          error?.response?.data?.message ||""
           'An error occurred during login. Please try again.';
         Alert.alert('Login Failed', errorMessage);
         throw error;

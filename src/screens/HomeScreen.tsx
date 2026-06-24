@@ -7,7 +7,7 @@ import Geolocation from 'react-native-geolocation-service';
 import { api } from '../services/api';
 import Icon from 'react-native-vector-icons/Ionicons';
 import CustomButton from '../components/Buttons/Button';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Props = {
@@ -18,7 +18,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [location, setLocation] = useState<{latitude: number, longitude: number, accuracy?: number} | null>(null);
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const query = useQueryClient();
 
 
   const {mutate,isPending}=useMutation({
@@ -34,6 +34,10 @@ export default function HomeScreen({ navigation }: Props) {
         }
     },
     onSuccess:()=>{
+      refetch();
+      query.invalidateQueries({queryKey:['NearbyPlaces']});
+      query.invalidateQueries({queryKey:['GetSavedLocation']});
+      query.invalidateQueries({queryKey:['locationsHistory']});
       navigation.navigate('Nearby');
     }
     
@@ -101,7 +105,6 @@ export default function HomeScreen({ navigation }: Props) {
     }
     },
     staleTime:5*60*1000,
-    refetchOnWindowFocus:false
   });
 
 
@@ -181,7 +184,7 @@ export default function HomeScreen({ navigation }: Props) {
               latitudeDelta: 0.01,
               longitudeDelta: 0.01,
             }}
-            showsUserLocation={true}
+            showsUserLocation={false}
             onMapReady={() => console.log('Google Maps is successfully ready')}
           >
             <Marker coordinate={location} title="You are here" />

@@ -36,24 +36,16 @@ export default function RegisterScreen({ navigation }: Props) {
     mutationFn: async ({email,password,full_name}:{email:string,password:string,full_name:string}) => {
       try {
           const response = await api.post('/auth/signup',{full_name,email,password});
-      
-          Alert.alert(
-            'Success',
-            'Registration successful! Please log in.',
-            [
-              { text: 'OK', onPress: () => navigation.replace('Login', { email, password }) }
-            ]
-          );
-             return response?.data
+          console.log(response,"RESPONSE=====================================================")
+          return response?.data
         } catch (error: any) {
-        
-          const errorMessage = error?.response?.data?.detail || error?.message || 'An error occurred during registration. Please try again.';
+          const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || 'An error occurred during registration. Please try again.';
           Alert.alert('Registration Failed', errorMessage);
           throw error;
         }
     },
-    onSuccess: (data) => {
-      navigation.replace('Home');
+    onSuccess: (data, variables) => {
+      navigation.replace('OTPVerification', { email: variables.email, password: variables.password });
     },
   });
 

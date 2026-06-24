@@ -1,48 +1,40 @@
-import React, { useState } from 'react';
+import React, {useState, useRef, useCallback} from 'react';
 import {
   StyleSheet,
   Text,
   View,
-
   TouchableOpacity,
-  ScrollView,
   Image,
-  TextInput,
   StatusBar,
   FlatList,
   Linking,
+  Dimensions,
+  ActivityIndicator,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  ViewToken,
+  Alert,
 } from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
-import { AuthStackParamList } from '../navigation/AuthNavigator';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {RouteProp} from '@react-navigation/native';
+import {AuthStackParamList} from '../navigation/AuthNavigator';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useMutation } from '@tanstack/react-query';
-import { api } from '../services/api';
-import CustomButton from '../components/Buttons/Button';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {api} from '../services/api';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import Config from 'react-native-config';
+
+const {width: SCREEN_WIDTH} = Dimensions.get('window');
+const CAROUSEL_HEIGHT = 280;
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'PlaceDetails'>;
   route: RouteProp<AuthStackParamList, 'PlaceDetails'>;
 };
 
-const DUMMY_PHOTOS = [
-  'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400&q=80',
-];
 
-const DUMMY_QUESTIONS = [
-  { id: '1', text: 'Do they have outdoor seating?', user: 'Meera', answers: 1 },
-  { id: '2', text: 'Is Wi-Fi available here?', user: 'Arjun', answers: 2 },
-  { id: '3', text: 'Do they have parking?', user: 'Rohan', answers: 1 },
-  {
-    id: '4',
-    text: 'What are the must try items here?',
-    user: 'Pooja',
-    answers: 3,
-  },
-];
 
-export default function PlaceDetailsScreen({ navigation, route }: Props) {
+export default function PlaceDetailsScreen({navigation, route}: Props) {
   const {
     placeId,
     placeName = 'Place',
@@ -56,81 +48,87 @@ export default function PlaceDetailsScreen({ navigation, route }: Props) {
     rating,
     photoUrl,
   } = route.params || {};
-  const [activeTab, setActiveTab] = useState<'Overview' | 'Photos' | 'Q&A'>(
-    'Overview',
-  );
-  const [qaMode, setQaMode] = useState<'Questions' | 'My Questions'>(
-    'Questions',
-  );
-const [question,setQuestion]=useState<string>('');
 
+  const [activeIndex, setActiveIndex] = useState(0);
 
-
-
-const {mutate,isPending}=useMutation({
-  mutationFn:async(payload:{question:string})=>{
-    try {
-      const response= await api.post(`/places/${placeId}/question`,payload);
+  const {data, isLoading} = useQuery({
+    queryKey: ['GetPlaceDetailsById', placeId],
+    queryFn: async () => {
+      try {
+        const response = await api.get(`/places/${placeId}/details`);
+        return response?.data?.data;
+      } catch (error: any) {
+          const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.message || ""
+      Alert.alert('Error Getting Place Details', errorMessage);
      
-    } catch (error:any) {
-      console.log(error?.response,"Question Error===================");
-      throw error;
-    }
-  }
-})
+        console.log(
+          error?.response,
+          'Get Place Details Error ===================',
+        );
+        throw error;
+      }
+    },
+    staleTime: 60 * 10 * 1000,
+  });
 
-// Render QA Section 
-  // const renderQA = () => (
-  //   <View style={styles.tabContent}>
-  //     <View style={styles.qaToggleContainer}>
-  //       <TouchableOpacity
-  //         style={[
-  //           styles.qaToggleBtn,
-  //           qaMode === 'Questions' && styles.qaToggleActive,
-  //         ]}
-  //         onPress={() => setQaMode('Questions')}
-  //       >
-  //         <Text
-  //           style={[
-  //             styles.qaToggleText,
-  //             qaMode === 'Questions' && styles.qaToggleTextActive,
-  //           ]}
-  //         >
-  //           Questions
-  //         </Text>
-  //       </TouchableOpacity>
-  //       <TouchableOpacity
-  //         style={[
-  //           styles.qaToggleBtn,
-  //           qaMode === 'My Questions' && styles.qaToggleActive,
-  //         ]}
-  //         onPress={() => setQaMode('My Questions')}
-  //       >
-  //         <Text
-  //           style={[
-  //             styles.qaToggleText,
-  //             qaMode === 'My Questions' && styles.qaToggleTextActive,
-  //           ]}
-  //         >
-  //           My Questions
-  //         </Text>
-  //       </TouchableOpacity>
-  //     </View>
+    const getPhotoUrl:any = (photoName: string | null): string | null => {
+      if (!photoName) return null;
+      return `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=400&key=${Config.GOOGLE_MAPS_API_KEY}`;
+    };
+  
 
-  //     {DUMMY_QUESTIONS.map(q => (
-  //       <View key={q.id} style={styles.questionCard}>
-  //         <Text style={styles.questionText}>{q.text}</Text>
-  //         <Text style={styles.questionSub}>
-  //           Asked by {q.user} • {q.answers} answer{q.answers > 1 ? 's' : ''}
-  //         </Text>
-  //       </View>
-  //     ))}
-  //   </View>
-  // );
+  // Build photos array from API data, falling back to the passed photoUrl
+  const photos: string[] = data?.photos?.length
+    ? data.photos
+    : photoUrl
+    ? [photoUrl]
+    : [];
 
-  const renderStars = (rating: number = 0) => {
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
+  // Create new chat session and navigate to ChatDetail
+  const {mutate: startChat, isPending: isStartingChat} = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`/places/${placeId}/question`, {
+        question: `Tell me about ${placeName || data?.display_name}`,
+      });
+      return response?.data;
+    },
+    onSuccess: (responseData: any) => {
+      const sessionId =
+        responseData?.session_id ||
+        responseData?.data?.session_id ||
+        responseData?.id;
+      if (sessionId) {
+        navigation.navigate('ChatDetail', {
+          sessionId,
+          placeName: placeName || data?.display_name,
+          placeAddress: formatted_address || data?.formatted_address,
+        });
+      }
+    },
+    onError: (error: any) => {
+      const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.message || ""
+      Alert.alert('Error Sending Message', errorMessage);
+     
+    },
+  });
+
+  const onViewableItemsChanged = useRef(
+    ({viewableItems}: {viewableItems: ViewToken[]}) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        setActiveIndex(viewableItems[0].index);
+      }
+    },
+  ).current;
+
+  const viewabilityConfig = useRef({viewAreaCoveragePercentThreshold: 50}).current;
+
+  const renderStars = (ratingValue: number = 0) => {
+    const fullStars = Math.floor(ratingValue);
+    const hasHalfStar = ratingValue % 1 >= 0.5;
     const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
 
     return (
@@ -138,9 +136,7 @@ const {mutate,isPending}=useMutation({
         {[...Array(fullStars)].map((_, index) => (
           <Icon key={`full-${index}`} name="star" size={14} color="#f59e0b" />
         ))}
-
         {hasHalfStar && <Icon name="star-half" size={14} color="#f59e0b" />}
-
         {[...Array(emptyStars)].map((_, index) => (
           <Icon
             key={`empty-${index}`}
@@ -153,138 +149,165 @@ const {mutate,isPending}=useMutation({
     );
   };
 
+  const renderCarouselItem = ({item}: {item: {name:string}}) => (
+      <Image
+        source={{uri: getPhotoUrl(item?.name)}}
+        style={styles.carouselImage}
+        resizeMode="contain"
+      />
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar
         translucent
         backgroundColor="transparent"
-        barStyle="light-content"
+        barStyle="dark-content"
       />
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Cover Image */}
-        <View style={styles.coverImageContainer}>
-          {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={styles.coverImage} />
-          ) : (
-            <View style={[styles.coverImage,styles.placeholderImage]}>
-              <Icon name={typeIcon as string} size={24} color="#9ca3af" />
-            </View>
-          )}
-          <View style={styles.headerOverlay}>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Icon name="arrow-back" size={24} color="#111827" />
-            </TouchableOpacity>
-            <View style={styles.headerRight}>
-              <TouchableOpacity
-                onPress={() => {
-                  if (google_maps_uri) {
-                    Linking.openURL(google_maps_uri);
-                  }
-                }}
-                style={styles.iconButton}
-              >
-                <Icon name="navigate" size={20} color="#111827" />
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.iconButton, { marginLeft: 12 }]}>
-                <Icon name="share-social-outline" size={24} color="#111827" />
-              </TouchableOpacity>
-            </View>
-          </View>
-          {/* <View style={styles.imageBadge}>
-            <Text style={styles.badgeText}>1/15</Text>
-          </View> */}
+      {/* ===== ZONE 1: Floating Header Buttons ===== */}
+      <View style={styles.headerOverlay}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => navigation.goBack()}>
+          <Icon name="arrow-back" size={24} color="#111827" />
+        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => {
+              if (google_maps_uri || data?.google_maps_uri) {
+                Linking.openURL(google_maps_uri || data?.google_maps_uri);
+              }
+            }}
+            style={styles.iconButton}>
+            <Icon name="navigate" size={20} color="#111827" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.iconButton, {marginLeft: 12}]}>
+            <Icon name="share-social-outline" size={24} color="#111827" />
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* Info Section */}
+      {/* ===== ZONE 2: Centered Image Carousel ===== */}
+      <View style={styles.carouselContainer}>
+        {photos.length > 0 ? (
+          <>
+            <FlatList
+              data={photos.slice(0, 4)}
+              renderItem={renderCarouselItem as any}
+              keyExtractor={(item, index) => `photo-${index}`}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              bounces={false}
+              style={styles.carouselList}
+            />
+            {/* Dot Indicators */}
+            {photos.slice(0, 4).length > 1 && (
+              <View style={styles.dotContainer}>
+                {photos.slice(0, 4).map((_, index) => (
+                  <View
+                    key={`dot-${index}`}
+                    style={[
+                      styles.dot,
+                      index === activeIndex
+                        ? styles.dotActive
+                        : styles.dotInactive,
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
+            {/* Photo counter badge */}
+            <View style={styles.photoBadge}>
+              <Icon name="images-outline" size={12} color="#ffffff" />
+              <Text style={styles.photoBadgeText}>
+                {activeIndex + 1}/{Math.min(photos.length, 4)}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.placeholderImage}>
+            <Icon
+              name={(typeIcon as string) || 'location'}
+              size={48}
+              color="#9ca3af"
+            />
+            <Text style={styles.placeholderText}>No photos available</Text>
+          </View>
+        )}
+      </View>
+
+      {/* ===== ZONE 3: Bottom Info + Ask Button ===== */}
+      <View style={styles.bottomSection}>
+        {/* Place Info */}
         <View style={styles.infoSection}>
-          <View style={styles.titleRow}>
-            <Text style={styles.placeTitle}>{placeName}</Text>
-            {/* <Icon name="checkmark-circle" size={20} color="#3b82f6" style={{ marginLeft: 6 }} /> */}
-          </View>
-
-          <View style={styles.ratingRow}>
-            <Text style={styles.ratingText}>{rating}</Text>
-            {renderStars(rating)}
-            <Text style={styles.reviewCount}>({user_rating_count})</Text>
-          </View>
-
-          <Text style={styles.detailsText}>{formatted_address}</Text>
-          <Text style={styles.statusText}>
-            <Text style={styles.openText}>{open_now ? 'Open' : 'Close'}</Text>
+          <Text style={styles.placeTitle} numberOfLines={2}>
+            {placeName || data?.display_name}
           </Text>
 
-          {/* Action Buttons */}
-          {/* <View style={styles.actionsRow}> */}
-          {/* <TouchableOpacity style={styles.actionItem}>
-              <View style={styles.actionIcon}><Icon name="call" size={20} color="#3b2c85" /></View>
-              <Text style={styles.actionLabel}>Call</Text>
-            </TouchableOpacity> */}
-          {/* <TouchableOpacity   style={styles.actionItem}>
-              <View style={styles.actionIcon}><Icon name="navigate" size={20} color="#3b2c85" /></View>
-              <Text style={styles.actionLabel}>Directions</Text>
-            </TouchableOpacity> */}
-          {/* <TouchableOpacity style={styles.actionItem}>
-              <View style={styles.actionIcon}><Icon name="bookmark-outline" size={20} color="#3b2c85" /></View>
-              <Text style={styles.actionLabel}>Save</Text>
-            </TouchableOpacity> */}
-          {/* <TouchableOpacity style={styles.actionItem}>
-              <View style={styles.actionIcon}><Icon name="share-social" size={20} color="#3b2c85" /></View>
-              <Text style={styles.actionLabel}>Share</Text>
-            </TouchableOpacity> */}
-          {/* </View> */}
-        </View>
+          <View style={styles.ratingRow}>
+            <Text style={styles.ratingText}>{rating || data?.rating}</Text>
+            {renderStars(rating || data?.rating)}
+            <Text style={styles.reviewCount}>
+              ({user_rating_count || data?.user_rating_count} review
+              {user_rating_count !== 1 ? 's' : ''})
+            </Text>
+          </View>
 
-        {/* Tab Bar */}
-        <View style={styles.tabBar}>
-          {['Q&A'].map(tab => (
-            <TouchableOpacity
-              key={tab}
+          <View style={styles.addressRow}>
+            <Icon name="location-outline" size={14} color="#6b7280" />
+            <Text style={styles.detailsText} numberOfLines={2}>
+              {formatted_address || data?.formatted_address}
+            </Text>
+          </View>
+
+          <View style={styles.statusRow}>
+            <View
               style={[
-                styles.tabItem,
-                activeTab === tab && styles.tabItemActive,
-              ]}
-              onPress={() => setActiveTab(tab as any)}
-            >
+                styles.statusBadge,
+                (open_now || data?.open_now)
+                  ? styles.statusBadgeOpen
+                  : styles.statusBadgeClosed,
+              ]}>
+              <View
+                style={[
+                  styles.statusDot,
+                  (open_now || data?.open_now)
+                    ? styles.statusDotOpen
+                    : styles.statusDotClosed,
+                ]}
+              />
               <Text
                 style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab}
+                  styles.statusBadgeText,
+                  (open_now || data?.open_now)
+                    ? styles.statusTextOpen
+                    : styles.statusTextClosed,
+                ]}>
+                {open_now || data?.open_now ? 'Open Now' : 'Closed'}
               </Text>
-            </TouchableOpacity>
-          ))}
+            </View>
+          </View>
         </View>
 
-        {/* Tab Content */}
-        {/* {activeTab === 'Overview' && renderOverview()}
-        {activeTab === 'Photos' && renderPhotos()} */}
-        {/* {activeTab === 'Q&A' && renderQA()} */}
-
-        {/* Extra space for floating footer */}
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* Floating Footer Input */}
-      <View style={styles.footerInputContainer}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-          value={question}
-          onChangeText={(text)=>setQuestion(text)}
-            style={styles.input}
-            placeholder="Ask a question about this place..."
-            placeholderTextColor="#9ca3af"
-          />
-          <CustomButton onPress={()=>mutate({question})} title='Ask' loading={isPending} disabled={isPending}/>
-          {/* <TouchableOpacity >
-            <Icon name="send" size={20} color="#3b2c85" />
-          </TouchableOpacity> */}
-        </View>
+        {/* Ask About This Place Button */}
+        <TouchableOpacity
+          style={styles.askButton}
+          activeOpacity={0.8}
+          disabled={isStartingChat}
+          onPress={() => startChat()}>
+          {isStartingChat ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <>
+              <Icon name="chatbubble-ellipses-outline" size={20} color="#ffffff" />
+              <Text style={styles.askButtonText}>Ask About This Place</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -293,30 +316,16 @@ const {mutate,isPending}=useMutation({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f9fafb',
   },
-  container: {
-    flex: 1,
-  },
-  coverImageContainer: {
-    width: '100%',
-    height: 250,
-    position: 'relative',
-  },
-  coverImage: {
-    width: '100%',
-    height: '100%',
-  },
-  placeholderImage: {
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#f3f4f6',
-  },
+
+  // ===== Zone 1: Floating Header =====
   headerOverlay: {
     position: 'absolute',
-    top: 50, // To account for translucent status bar
+    top: 50,
     left: 20,
     right: 20,
+    zIndex: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -329,7 +338,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,
@@ -337,38 +346,98 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
   },
-  imageBadge: {
+
+  // ===== Zone 2: Carousel =====
+  carouselContainer: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    position: 'relative',
+  },
+  carouselList: {
+    flex: 0.5,
+  },
+  carouselImage: {
+    width: SCREEN_WIDTH,
+    height: '100%',
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+  },
+  dotActive: {
+    backgroundColor: '#3b2c85',
+    width: 24,
+    borderRadius: 4,
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(255,255,255,0.7)',
+  },
+  photoBadge: {
     position: 'absolute',
     bottom: 16,
     right: 16,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  infoSection: {
-    padding: 24,
-    backgroundColor: '#ffffff',
-  },
-  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 4,
+  },
+  photoBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  placeholderImage: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+
+  // ===== Zone 3: Bottom Section =====
+  bottomSection: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -20,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: -4},
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  infoSection: {
+    marginBottom: 20,
   },
   placeTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#111827',
+    marginBottom: 10,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   ratingText: {
     fontSize: 14,
@@ -384,175 +453,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
   },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    gap: 4,
+  },
   detailsText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 6,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
-  },
-  openText: {
-    color: '#10b981', // Emerald 500
-    fontWeight: '600',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    columnGap: 35,
-    alignItems: 'center',
-    marginTop: 10,
-    paddingHorizontal: 10,
-  },
-  actionItem: {
-    alignItems: 'center',
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#f3f4f6', // Light gray/purple tint
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    marginHorizontal: 24,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabItemActive: {
-    borderBottomColor: '#3b2c85',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  tabTextActive: {
-    color: '#3b2c85',
-  },
-  tabContent: {
-    padding: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  aboutText: {
-    fontSize: 14,
-    color: '#4b5563',
-    lineHeight: 22,
-  },
-  readMore: {
-    color: '#3b2c85',
-    fontWeight: '600',
-  },
-  photosHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#3b2c85',
-    fontWeight: '600',
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  gridImage: {
-    width: '31%',
-    aspectRatio: 1,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  qaToggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 20,
-  },
-  qaToggleBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  qaToggleActive: {
-    backgroundColor: '#3b2c85',
-  },
-  qaToggleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  qaToggleTextActive: {
-    color: '#ffffff',
-  },
-  questionCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  questionText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  questionSub: {
     fontSize: 13,
     color: '#6b7280',
+    flex: 1,
+    lineHeight: 18,
   },
-  footerInputContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  inputWrapper: {
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 24,
-    paddingHorizontal: 16,
   },
-  input: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#111827',
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  statusBadgeOpen: {
+    backgroundColor: '#ecfdf5',
+  },
+  statusBadgeClosed: {
+    backgroundColor: '#fef2f2',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotOpen: {
+    backgroundColor: '#10b981',
+  },
+  statusDotClosed: {
+    backgroundColor: '#ef4444',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusTextOpen: {
+    color: '#10b981',
+  },
+  statusTextClosed: {
+    color: '#ef4444',
+  },
+
+  // ===== Ask Button =====
+  askButton: {
+    backgroundColor: '#3b2c85',
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#3b2c85',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  askButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

@@ -10,6 +10,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,7 +19,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
-
+import { Menu } from "react-native-paper"
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'ChatDetail'>;
   route: RouteProp<AuthStackParamList, 'ChatDetail'>;
@@ -51,6 +52,26 @@ function formatTime(dateString: string): string {
   });
 }
 
+const AVATAR_COLORS = [
+  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
+  '#ec4899', '#f43f5e', '#ef4444', '#f97316',
+  '#eab308', '#22c55e', '#14b8a6', '#06b6d4',
+  '#3b82f6', '#2563eb',
+];
+
+function getAvatarColor(id: any): string {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
+function getPlaceInitials(name: string): string {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map(w => w.charAt(0).toUpperCase())
+    .join('');
+}
+
+
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   const today = new Date();
@@ -71,11 +92,17 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
     sessionId,
     placeName = 'Chat',
     placeAddress = '',
+    placeId
   } = route.params || {};
   const [messageText, setMessageText] = useState('');
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
+  const [isBotTyping, setIsBotTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const queryClient = useQueryClient();
-
+  const avatarColor = getAvatarColor(sessionId);
+  const initials = getPlaceInitials(placeName);
+  const [visible,setVisible]=useState(false);
+const query =useQueryClient();
   // Fetch session detail
   const {
     data: sessionData,
@@ -96,7 +123,13 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
   });
 
   const messages = sessionData?.messages || [];
-  console.log('Messages count:', messages.length, 'sessionId:', sessionId);
+
+  // Sync display messages with session data
+  useEffect(() => {
+    if (sessionData?.messages && !isStreaming) {
+      setDisplayMessages(sessionData.messages);
+    }
+  }, [sessionData?.messages, isStreaming]);
 
   // Send a new message
   const { mutate: sendMessage, isPending: isSending } = useMutation({
@@ -107,38 +140,146 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
       });
       return response?.data;
     },
-    onSuccess: () => {
-      setMessageText('');
-     setTimeout(()=>{ refetch();},3000)
-      // queryClient.invalidateQueries({ queryKey: ['AllChats'] });
+    onSuccess: (data) => {
+      const assistantText = data?.answer || data?.content || data?.message || data?.response || "";
+      
+      if (assistantText) {
+        simulateStreaming(assistantText);
+      } else {
+        setIsBotTyping(false);
+        refetch();
+      }
     },
     onError: (error: any) => {
-      console.log('Send message error:', error?.response?.data || error.message);
+      setIsBotTyping(false);
+      const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.message || ""
+      Alert.alert('Error Sending Message', errorMessage);
+      console.log('Send message error:', errorMessage);
     },
   });
 
+  const simulateStreaming = (fullText: string) => {
+    setIsBotTyping(false);
+    setIsStreaming(true);
+    const assistantMessageId = Date.now() + 1;
+    const newAssistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString(),
+    };
+    
+    setDisplayMessages(prev => [...prev, newAssistantMessage]);
+
+    let currentText = '';
+    const characters = fullText.split('');
+    let charIndex = 0;
+
+    // Stream by characters for a smoother effect, or words for speed
+    const interval = setInterval(() => {
+      if (charIndex < characters.length) {
+        currentText += characters[charIndex];
+        setDisplayMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessageId ? { ...msg, content: currentText } : msg
+          )
+        );
+        charIndex++;
+      } else {
+        clearInterval(interval);
+        setIsStreaming(false);
+        setTimeout(() => refetch(), 1000);
+      }
+    }, 20);
+  };
+
+  const handleDeleteSession = (sessionId: any) => {
+  Alert.alert(
+    'Delete Session',
+    'Are you sure you want to delete this session?',
+    [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteSession(sessionId),
+      },
+    ]
+  );
+};
+
+  // delete session
+  const {mutate:deleteSession,isPending:iseDeleting} =useMutation({
+   mutationFn:async(sessionId:any)=>{   
+           const response= await api.delete(`places/qa/sessions?session_ids=${sessionId}`);
+           return response?.data;
+   
+   },
+   onSuccess:()=>{
+    query.invalidateQueries({ queryKey: ['AllChats'] });
+    navigation.goBack();
+   },
+   onError:(error:any)=>{
+    const errorMessage = error?.response?.data?.detail || error?.response?.data?.message ||"";
+    Alert.alert('Error Deleting Chat', errorMessage);
+    console.log('Delete chat error:', errorMessage);
+   }
+  })
+
   // Scroll to bottom when messages change
   useEffect(() => {
-    if (messages.length > 0) {
+    if (displayMessages.length > 0 || isBotTyping) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 200);
     }
-  }, [messages.length]);
+  }, [displayMessages.length, isBotTyping]);
 
   const handleSend = () => {
     const trimmed = messageText.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || isBotTyping) return;
+
+    // Add user message immediately to UI
+    const userMessage: Message = {
+      id: Date.now(), // temporary ID
+      role: 'user',
+      content: trimmed,
+      created_at: new Date().toISOString(),
+    };
+
+    setDisplayMessages(prev => [...prev, userMessage]);
+    setMessageText('');
+    setIsBotTyping(true);
+
     sendMessage(trimmed);
   };
 
   // Group messages by date
   const getDateLabel = (index: number): string | null => {
-    if (index === 0) return formatDate(messages[0].created_at);
-    const currentDate = new Date(messages[index].created_at).toDateString();
-    const prevDate = new Date(messages[index - 1].created_at).toDateString();
-    if (currentDate !== prevDate) return formatDate(messages[index].created_at);
+    if (index === 0) return formatDate(displayMessages[0].created_at);
+    const currentDate = new Date(displayMessages[index].created_at).toDateString();
+    const prevDate = new Date(displayMessages[index - 1].created_at).toDateString();
+    if (currentDate !== prevDate) return formatDate(displayMessages[index].created_at);
     return null;
+  };
+
+  const renderTypingIndicator = () => {
+    if (!isBotTyping) return null;
+    return (
+      <View style={[styles.messageBubbleRow, styles.messageBubbleRowLeft]}>
+        <View style={styles.assistantIconContainer}>
+          <Icon name="sparkles" size={14} color="#3b2c85" />
+        </View>
+        <View style={[styles.messageBubble, styles.assistantBubble, { paddingVertical: 10, paddingHorizontal: 16 }]}>
+          <ActivityIndicator size="small" color="#3b2c85" />
+        </View>
+      </View>
+    );
   };
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
@@ -200,6 +341,12 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
           onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={22} color="#ffffff" />
         </TouchableOpacity>
+            {/* Avatar */}
+           <TouchableOpacity
+           onPress={() => navigation.navigate('PlaceDetails' as any,{placeId:placeId ,placeName:placeName ,placeAddress:placeAddress})}>
+            <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View></TouchableOpacity>  
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {placeName}
@@ -208,9 +355,25 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
             {placeAddress}
           </Text>
         </View>
-        <TouchableOpacity style={styles.headerAction}>
-          <Icon name="ellipsis-vertical" size={20} color="#ffffff" />
-        </TouchableOpacity>
+        <Menu
+          visible={visible}
+          onDismiss={() => setVisible(false)}
+          anchor={
+          <TouchableOpacity 
+          onPress={() => setVisible(true)}
+          style={styles.headerAction}>
+                  <Icon name="ellipsis-vertical" size={20} color="#ffffff" />
+                </TouchableOpacity>
+          }
+        >
+          <Menu.Item onPress={() => {
+            if(placeId){
+              navigation.navigate('PlaceDetails' as any,{placeId:placeId ,placeName:placeName ,placeAddress:placeAddress} )
+            }
+          }} title="View Place Details" />
+          <Menu.Item onPress={() => {handleDeleteSession(sessionId)}} title="Delete Chat" />
+        </Menu>
+      
       </View>
 
       {/* Chat Messages */}
@@ -226,7 +389,7 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={messages}
+            data={displayMessages}
             keyExtractor={(item, index) =>
               item.id ? item.id.toString() : index.toString()
             }
@@ -236,6 +399,7 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
             onContentSizeChange={() =>
               flatListRef.current?.scrollToEnd({ animated: false })
             }
+            ListFooterComponent={renderTypingIndicator}
             ListHeaderComponent={
               <View style={styles.chatInfoCard}>
                 <Icon name="location-outline" size={18} color="#3b2c85" />
@@ -294,11 +458,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#3b2c85',
   },
+  //avatar
+   avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
 
   // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent:"center",
+    columnGap:10,
     paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: '#3b2c85',

@@ -84,6 +84,7 @@ const ChatScreen = () => {
       sessionId: session.session_id,
       placeName: session.place.name,
       placeAddress: session.place.address,
+      placeId:session.place.place_id,
     });
   };
 
@@ -106,24 +107,24 @@ const ChatScreen = () => {
         <View style={styles.sessionContent}>
           <View style={styles.sessionTopRow}>
             <Text style={styles.placeName} numberOfLines={1}>
-              {item.place.name}
+              {item?.place?.name}
             </Text>
             <Text style={styles.timeText}>{timeAgo}</Text>
           </View>
-          <Text style={styles.sessionTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
+          {/* <Text style={styles.sessionTitle} numberOfLines={1}>
+            {item?.title}
+          </Text> */}
           <View style={styles.sessionBottomRow}>
             <Text style={styles.lastMessage} numberOfLines={1}>
-              {item.last_message}
+              {item?.last_message}
             </Text>
-            {item.message_count > 0 && (
+            {/* {item.message_count > 0 && (
               <View style={styles.messageBadge}>
                 <Text style={styles.messageBadgeText}>
                   {item.message_count}
                 </Text>
               </View>
-            )}
+            )} */}
           </View>
         </View>
       </TouchableOpacity>
