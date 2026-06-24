@@ -98,7 +98,20 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
   const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [typingDots, setTypingDots] = useState('');
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isBotTyping) {
+      interval = setInterval(() => {
+        setTypingDots(prev => (prev.length >= 3 ? '' : prev + '.'));
+      }, 400);
+    } else {
+      setTypingDots('');
+    }
+    return () => clearInterval(interval);
+  }, [isBotTyping]);
   const avatarColor = getAvatarColor(sessionId);
   const initials = getPlaceInitials(placeName);
   const [visible,setVisible]=useState(false);
@@ -242,7 +255,7 @@ const query =useQueryClient();
 
   const handleSend = () => {
     const trimmed = messageText.trim();
-    if (!trimmed || isSending || isBotTyping) return;
+    if (!trimmed || isSending || isBotTyping || isStreaming) return;
 
     // Add user message immediately to UI
     const userMessage: Message = {
@@ -275,8 +288,10 @@ const query =useQueryClient();
         <View style={styles.assistantIconContainer}>
           <Icon name="sparkles" size={14} color="#3b2c85" />
         </View>
-        <View style={[styles.messageBubble, styles.assistantBubble, { paddingVertical: 10, paddingHorizontal: 16 }]}>
-          <ActivityIndicator size="small" color="#3b2c85" />
+        <View style={[styles.messageBubble, styles.assistantBubble, { paddingVertical: 12, paddingHorizontal: 16, minWidth: 50 }]}>
+          <Text style={{ fontSize: 18, color: '#3b2c85', fontWeight: '700', letterSpacing: 2 }}>
+            {typingDots || ' '}
+          </Text>
         </View>
       </View>
     );
@@ -431,15 +446,15 @@ const query =useQueryClient();
               onChangeText={setMessageText}
               multiline
               maxLength={500}
-              editable={!isSending}
+              editable={!isSending && !isBotTyping && !isStreaming}
             />
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (!messageText.trim() || isSending) && styles.sendButtonDisabled,
+                (!messageText.trim() || isSending || isBotTyping || isStreaming) && styles.sendButtonDisabled,
               ]}
               onPress={handleSend}
-              disabled={!messageText.trim() || isSending}>
+              disabled={!messageText.trim() || isSending || isBotTyping || isStreaming}>
               {isSending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (

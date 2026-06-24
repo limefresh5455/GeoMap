@@ -35,8 +35,22 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
   const [messageText, setMessageText] = useState('');
   const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
   const [isBotTyping, setIsBotTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [typingDots, setTypingDots] = useState('');
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isBotTyping) {
+      interval = setInterval(() => {
+        setTypingDots(prev => (prev.length >= 3 ? '' : prev + '.'));
+      }, 400);
+    } else {
+      setTypingDots('');
+    }
+    return () => clearInterval(interval);
+  }, [isBotTyping]);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -63,11 +77,13 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.setItem('agent_travel_messages', JSON.stringify(displayMessages));
+    if (!isStreaming) {
+      AsyncStorage.setItem('agent_travel_messages', JSON.stringify(displayMessages));
+    }
     if (sessionId) {
       AsyncStorage.setItem('agent_travel_session_id', sessionId);
     }
-  }, [displayMessages, sessionId]);
+  }, [displayMessages, sessionId, isStreaming]);
 
   const { mutate: sendMessage, isPending: isSending } = useMutation({
     mutationFn: async (content: string) => {
@@ -80,7 +96,6 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
       return response?.data;
     },
     onSuccess: (data) => {
-      setIsBotTyping(false);
       const newSessionId = data?.session_id || data?.data?.session_id;
       if (newSessionId && !sessionId) {
         setSessionId(newSessionId);
@@ -88,13 +103,9 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
       
       const assistantText = data?.response || data?.message || data?.content || data?.answer || "";
       if (assistantText) {
-        const assistantMessage: Message = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: assistantText,
-          created_at: new Date().toISOString(),
-        };
-        setDisplayMessages(prev => [...prev, assistantMessage]);
+        simulateStreaming(assistantText);
+      } else {
+        setIsBotTyping(false);
       }
     },
     onError: (error: any) => {
@@ -106,9 +117,43 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
     },
   });
 
+  const simulateStreaming = (fullText: string) => {
+    setIsBotTyping(false);
+    setIsStreaming(true);
+    
+    const assistantMessageId = Date.now().toString();
+    const newAssistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString(),
+    };
+    
+    setDisplayMessages(prev => [...prev, newAssistantMessage]);
+
+    let currentText = '';
+    const characters = fullText.split('');
+    let charIndex = 0;
+
+    const interval = setInterval(() => {
+      if (charIndex < characters.length) {
+        currentText += characters[charIndex];
+        setDisplayMessages(prev => 
+          prev.map(msg => 
+            msg.id === assistantMessageId ? { ...msg, content: currentText } : msg
+          )
+        );
+        charIndex++;
+      } else {
+        clearInterval(interval);
+        setIsStreaming(false);
+      }
+    }, 20);
+  };
+
   const handleSend = () => {
     const trimmed = messageText.trim();
-    if (!trimmed || isSending || isBotTyping) return;
+    if (!trimmed || isSending || isBotTyping || isStreaming) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -201,8 +246,10 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
               <View style={styles.assistantIconContainer}>
                 <Icon name="airplane" size={14} color="#3b2c85" />
               </View>
-              <View style={[styles.messageBubble, styles.assistantBubble, { paddingVertical: 10, paddingHorizontal: 16 }]}>
-                <ActivityIndicator size="small" color="#3b2c85" />
+              <View style={[styles.messageBubble, styles.assistantBubble, { paddingVertical: 12, paddingHorizontal: 16, minWidth: 50 }]}>
+                <Text style={{ fontSize: 18, color: '#3b2c85', fontWeight: '700', letterSpacing: 2 }}>
+                  {typingDots || ' '}
+                </Text>
               </View>
             </View>
           )}
@@ -217,15 +264,15 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
               value={messageText}
               onChangeText={setMessageText}
               multiline
-              editable={!isSending}
+              editable={!isSending && !isBotTyping && !isStreaming}
             />
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (!messageText.trim() || isSending) && styles.sendButtonDisabled,
+                (!messageText.trim() || isSending || isBotTyping || isStreaming) && styles.sendButtonDisabled,
               ]}
               onPress={handleSend}
-              disabled={!messageText.trim() || isSending}>
+              disabled={!messageText.trim() || isSending || isBotTyping || isStreaming}>
               {isSending ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
