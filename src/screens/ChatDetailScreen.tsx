@@ -102,7 +102,7 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: any;
     if (isBotTyping) {
       interval = setInterval(() => {
         setTypingDots(prev => (prev.length >= 3 ? '' : prev + '.'));
