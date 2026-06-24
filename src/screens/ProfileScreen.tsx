@@ -94,7 +94,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   // 5. Delete Current Location Mutation
   const deleteLocationMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.delete('/locations/current');
+      const res = await api.delete('/locations/me');
       return res.data;
     },
     onSuccess: () => {
