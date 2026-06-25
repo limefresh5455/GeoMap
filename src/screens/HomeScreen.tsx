@@ -30,37 +30,30 @@ export default function HomeScreen({ navigation }: Props) {
 
   const getWeatherIcon = (code: number, isDay: boolean = true) => {
     switch (code) {
-      case 1000: return isDay ? 'sunny' : 'moon';
-      case 1003: return isDay ? 'partly-sunny' : 'cloudy-night';
-      case 1006:
-      case 1009: return 'cloudy';
-      case 1030:
-      case 1135: return 'water';
-      case 1063:
-      case 1180:
-      case 1183:
-      case 1186:
-      case 1189:
-      case 1192:
-      case 1195:
-      case 1240:
-      case 1243:
-      case 1246: return 'rainy';
-      case 1087:
-      case 1273:
-      case 1276:
-      case 1279:
-      case 1282: return 'thunderstorm';
-      case 1114:
-      case 1117:
-      case 1210:
-      case 1213:
-      case 1216:
-      case 1219:
-      case 1222:
-      case 1225:
-      case 1255:
-      case 1258: return 'snow';
+      case 0:
+      case 1: return isDay ? 'sunny' : 'moon';
+      case 2:
+      case 3: return isDay ? 'partly-sunny' : 'cloudy-night';
+      case 45:
+      case 48: return 'water';
+      case 51:
+      case 53:
+      case 55:
+      case 61:
+      case 63:
+      case 65:
+      case 80:
+      case 81:
+      case 82: return 'rainy';
+      case 71:
+      case 73:
+      case 75:
+      case 77:
+      case 85:
+      case 86: return 'snow';
+      case 95:
+      case 96:
+      case 99: return 'thunderstorm';
       default: return 'thermometer';
     }
   };
@@ -293,17 +286,17 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Location</Text>
         <View style={styles.headerRight}>
-          {weatherData?.data ? (
+          {weatherData?.data?.current_weather ? (
             <TouchableOpacity 
               style={styles.weatherPill}
               onPress={() => navigation.navigate('Weather')}
             >
               <Icon 
-                name={getWeatherIcon(weatherData.data.weather?.condition_code, weatherData.data.weather?.is_day)} 
+                name={getWeatherIcon(weatherData.data.current_weather.weathercode, !!weatherData.data.current_weather.is_day)} 
                 size={18} 
                 color="#3b2c85" 
               />
-              <Text style={styles.weatherPillText}>{weatherData.data.temperature?.current_c?.toFixed(0)}°</Text>
+              <Text style={styles.weatherPillText}>{weatherData.data.current_weather.temperature?.toFixed(0)}°</Text>
             </TouchableOpacity>
           ) : (
             <View style={[styles.weatherPill, { opacity: 0.6 }]}>

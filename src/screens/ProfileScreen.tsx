@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -19,6 +19,7 @@ import { locationService } from '../services/locationService';
 import { weatherService } from '../services/weatherService';
 import { placeService } from '../services/placeService';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 type ProfileScreenProps = {
   navigation: any;
@@ -77,6 +78,14 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     queryKey: ['profileWeather'],
     queryFn: () => weatherService.getForecast(),
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchStats();
+      refetchSavedCount();
+      return () => {};
+    }, [refetchStats, refetchSavedCount])
+  );
 
   // 3. Logout Mutation
   const logoutMutation = useMutation({
@@ -152,39 +161,66 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     queryClient.invalidateQueries({ queryKey: ['profileWeather'] });
   };
 
+  const getWeatherCondition = (code: number) => {
+    switch (code) {
+      case 0: return 'Clear sky';
+      case 1: return 'Mainly clear';
+      case 2: return 'Partly cloudy';
+      case 3: return 'Overcast';
+      case 45:
+      case 48: return 'Fog';
+      case 51:
+      case 53:
+      case 55: return 'Drizzle';
+      case 56:
+      case 57: return 'Freezing Drizzle';
+      case 61:
+      case 63:
+      case 65: return 'Rain';
+      case 66:
+      case 67: return 'Freezing Rain';
+      case 71:
+      case 73:
+      case 75: return 'Snow fall';
+      case 77: return 'Snow grains';
+      case 80:
+      case 81:
+      case 82: return 'Rain showers';
+      case 85:
+      case 86: return 'Snow showers';
+      case 95: return 'Thunderstorm';
+      case 96:
+      case 99: return 'Thunderstorm with hail';
+      default: return 'Unknown';
+    }
+  };
+
   const getWeatherIcon = (code: number, isDay: boolean = true) => {
     switch (code) {
-      case 1000: return isDay ? 'sunny' : 'moon';
-      case 1003: return isDay ? 'partly-sunny' : 'cloudy-night';
-      case 1006:
-      case 1009: return 'cloudy';
-      case 1030:
-      case 1135: return 'water';
-      case 1063:
-      case 1180:
-      case 1183:
-      case 1186:
-      case 1189:
-      case 1192:
-      case 1195:
-      case 1240:
-      case 1243:
-      case 1246: return 'rainy';
-      case 1087:
-      case 1273:
-      case 1276:
-      case 1279:
-      case 1282: return 'thunderstorm';
-      case 1114:
-      case 1117:
-      case 1210:
-      case 1213:
-      case 1216:
-      case 1219:
-      case 1222:
-      case 1225:
-      case 1255:
-      case 1258: return 'snow';
+      case 0:
+      case 1: return isDay ? 'sunny' : 'moon';
+      case 2:
+      case 3: return isDay ? 'partly-sunny' : 'cloudy-night';
+      case 45:
+      case 48: return 'water';
+      case 51:
+      case 53:
+      case 55:
+      case 61:
+      case 63:
+      case 65:
+      case 80:
+      case 81:
+      case 82: return 'rainy';
+      case 71:
+      case 73:
+      case 75:
+      case 77:
+      case 85:
+      case 86: return 'snow';
+      case 95:
+      case 96:
+      case 99: return 'thunderstorm';
       default: return 'thermometer';
     }
   };
@@ -306,7 +342,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             <ActivityIndicator size="small" color="#3b2c85" />
             <Text style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>Loading weather...</Text>
           </View>
-        ) : weatherData?.data ? (
+        ) : weatherData?.data?.current_weather ? (
           <TouchableOpacity 
             style={[styles.sectionCard, styles.weatherCard]}
             onPress={() => navigation.navigate('Weather')}
@@ -314,28 +350,32 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             <View style={styles.weatherMain}>
               <View>
                 <Text style={styles.weatherCity}>{weatherData.data.location?.city || 'Current Weather'}</Text>
-                <Text style={styles.weatherTemp}>{weatherData.data.temperature?.current_c?.toFixed(1)}°C</Text>
-                <Text style={styles.weatherCondition}>{weatherData.data.weather?.condition}</Text>
+                <Text style={styles.weatherTemp}>{weatherData.data.current_weather.temperature?.toFixed(1)}°C</Text>
+                <Text style={styles.weatherCondition}>{getWeatherCondition(weatherData.data.current_weather.weathercode)}</Text>
               </View>
               <Icon 
-                name={getWeatherIcon(weatherData.data.weather?.condition_code || 1000, weatherData.data.weather?.is_day ?? true)} 
+                name={getWeatherIcon(weatherData.data.current_weather.weathercode, !!weatherData.data.current_weather.is_day)} 
                 size={56} 
                 color="#3b2c85" 
               />
             </View>
             <View style={styles.weatherFooter}>
               <View style={styles.weatherStat}>
-                <Icon name="water-outline" size={14} color="#6b7280" />
-                <Text style={styles.weatherStatText}>{weatherData.data.atmosphere?.humidity}% Hum.</Text>
-              </View>
-              <View style={styles.weatherStat}>
-                <Icon name="leaf-outline" size={14} color="#6b7280" />
-                <Text style={styles.weatherStatText}>UV {weatherData.data.atmosphere?.uv_index}</Text>
-              </View>
-              <View style={styles.weatherStat}>
                 <Icon name="navigate-outline" size={14} color="#6b7280" />
-                <Text style={styles.weatherStatText}>{weatherData.data.wind?.speed_kph} km/h</Text>
+                <Text style={styles.weatherStatText}>{weatherData.data.current_weather.windspeed} km/h</Text>
               </View>
+              <View style={styles.weatherStat}>
+                <Icon name="compass-outline" size={14} color="#6b7280" />
+                <Text style={styles.weatherStatText}>{weatherData.data.current_weather.winddirection}°</Text>
+              </View>
+              {weatherData.data.daily && (
+                <View style={styles.weatherStat}>
+                  <Icon name="thermometer-outline" size={14} color="#6b7280" />
+                  <Text style={styles.weatherStatText}>
+                    {weatherData.data.daily.temperature_2m_max[0]?.toFixed(0)}° / {weatherData.data.daily.temperature_2m_min[0]?.toFixed(0)}°
+                  </Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
         ) : (
@@ -403,7 +443,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
                 <Text style={styles.visitStatValue}>
-                  {visitStats?.data?.total_visits ?? (visitStats as any)?.total_visits ?? 0}
+                  {visitStats?.data?.total_visits ?? (visitStats as any)?.total_visits ?? (visitStats as any)?.totalVisits ?? 0}
                 </Text>
               )}
               <Text style={styles.visitStatLabel}>Visits</Text>
@@ -413,14 +453,14 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
                 <Text style={styles.visitStatValue}>
-                  {visitStats?.data?.unique_places ?? (visitStats as any)?.unique_places ?? 0}
+                  {visitStats?.data?.unique_places ?? (visitStats as any)?.unique_places ?? (visitStats as any)?.uniquePlaces ?? 0}
                 </Text>
               )}
               <Text style={styles.visitStatLabel}>Places</Text>
             </View>
             <View style={styles.visitStatBox}>
               <Text style={styles.visitStatValue}>
-                {savedPlacesData?.total_count ?? (savedPlacesData as any)?.data?.total_count ?? savedPlacesData?.data?.length ?? 0}
+                {savedPlacesData?.total_count ?? (savedPlacesData as any)?.data?.total_count ?? (savedPlacesData as any)?.totalCount ?? (savedPlacesData as any)?.count ?? savedPlacesData?.data?.length ?? 0}
               </Text>
               <Text style={styles.visitStatLabel}>Saved</Text>
             </View>

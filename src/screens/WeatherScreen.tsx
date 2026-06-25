@@ -19,45 +19,72 @@ type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Weather'>;
 };
 
+const getWeatherCondition = (code: number) => {
+  switch (code) {
+    case 0: return 'Clear sky';
+    case 1: return 'Mainly clear';
+    case 2: return 'Partly cloudy';
+    case 3: return 'Overcast';
+    case 45:
+    case 48: return 'Fog';
+    case 51:
+    case 53:
+    case 55: return 'Drizzle';
+    case 56:
+    case 57: return 'Freezing Drizzle';
+    case 61:
+    case 63:
+    case 65: return 'Rain';
+    case 66:
+    case 67: return 'Freezing Rain';
+    case 71:
+    case 73:
+    case 75: return 'Snow fall';
+    case 77: return 'Snow grains';
+    case 80:
+    case 81:
+    case 82: return 'Rain showers';
+    case 85:
+    case 86: return 'Snow showers';
+    case 95: return 'Thunderstorm';
+    case 96:
+    case 99: return 'Thunderstorm with hail';
+    default: return 'Unknown';
+  }
+};
+
 const getWeatherIcon = (code: number, isDay: boolean = true) => {
   switch (code) {
-    case 1000: return isDay ? 'sunny' : 'moon';
-    case 1003: return isDay ? 'partly-sunny' : 'cloudy-night';
-    case 1006:
-    case 1009: return 'cloudy';
-    case 1030:
-    case 1135: return 'water';
-    case 1063:
-    case 1180:
-    case 1183:
-    case 1186:
-    case 1189:
-    case 1192:
-    case 1195:
-    case 1240:
-    case 1243:
-    case 1246: return 'rainy';
-    case 1087:
-    case 1273:
-    case 1276:
-    case 1279:
-    case 1282: return 'thunderstorm';
-    case 1114:
-    case 1117:
-    case 1210:
-    case 1213:
-    case 1216:
-    case 1219:
-    case 1222:
-    case 1225:
-    case 1255:
-    case 1258: return 'snow';
+    case 0:
+    case 1: return isDay ? 'sunny' : 'moon';
+    case 2:
+    case 3: return isDay ? 'partly-sunny' : 'cloudy-night';
+    case 45:
+    case 48: return 'water';
+    case 51:
+    case 53:
+    case 55:
+    case 61:
+    case 63:
+    case 65:
+    case 80:
+    case 81:
+    case 82: return 'rainy';
+    case 71:
+    case 73:
+    case 75:
+    case 77:
+    case 85:
+    case 86: return 'snow';
+    case 95:
+    case 96:
+    case 99: return 'thunderstorm';
     default: return 'thermometer';
   }
 };
 
 export default function WeatherScreen({ navigation }: Props) {
-  const { data: weather, isLoading: weatherLoading, error: weatherError } = useQuery({
+  const { data: weather, isLoading: weatherLoading, error: weatherError, refetch } = useQuery({
     queryKey: ['weatherForecast'],
     queryFn: () => weatherService.getForecast(),
   });
@@ -68,6 +95,9 @@ export default function WeatherScreen({ navigation }: Props) {
   });
 
   const weatherData = weather?.data;
+  const current = weatherData?.current_weather;
+  const hourly = weatherData?.hourly;
+  const daily = weatherData?.daily;
   const aqiData = airQuality?.data;
 
   if (weatherLoading || aqiLoading) {
@@ -79,6 +109,24 @@ export default function WeatherScreen({ navigation }: Props) {
     );
   }
 
+  const formatTime = (timeStr: string) => {
+    try {
+      const date = new Date(timeStr);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return timeStr;
+    }
+  };
+
+  const getDayName = (timeStr: string) => {
+    try {
+      const date = new Date(timeStr);
+      return date.toLocaleDateString([], { weekday: 'short' });
+    } catch {
+      return timeStr;
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -87,43 +135,72 @@ export default function WeatherScreen({ navigation }: Props) {
           <Icon name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Weather & Air Quality</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => refetch()} style={styles.backButton}>
+          <Icon name="refresh" size={22} color="#111827" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {weatherData ? (
+        {weatherData && current ? (
           <>
             <View style={styles.mainCard}>
               <Text style={styles.cityText}>{weatherData.location?.city || 'Current Location'}</Text>
-              <Text style={styles.timeText}>As of {weatherData.location?.local_time}</Text>
+              <Text style={styles.timeText}>As of {formatTime(current.time)}</Text>
               
               <View style={styles.tempRow}>
                 <Icon
-                  name={getWeatherIcon(weatherData.weather?.condition_code, weatherData.weather?.is_day)}
+                  name={getWeatherIcon(current.weathercode, !!current.is_day)}
                   size={64}
                   color="#3b2c85"
                 />
                 <View style={styles.tempContainer}>
-                  <Text style={styles.currentTemp}>{weatherData.temperature?.current_c?.toFixed(1)}°C</Text>
-                  <Text style={styles.conditionText}>{weatherData.weather?.condition}</Text>
+                  <Text style={styles.currentTemp}>{current.temperature?.toFixed(1)}°C</Text>
+                  <Text style={styles.conditionText}>{getWeatherCondition(current.weathercode)}</Text>
                 </View>
               </View>
 
               <View style={styles.subInfoRow}>
                 <View style={styles.subInfoItem}>
-                  <Text style={styles.subInfoLabel}>Feels Like</Text>
-                  <Text style={styles.subInfoValue}>{weatherData.temperature?.feels_like_c?.toFixed(1)}°C</Text>
-                </View>
-                <View style={styles.subInfoItem}>
-                  <Text style={styles.subInfoLabel}>Humidity</Text>
-                  <Text style={styles.subInfoValue}>{weatherData.atmosphere?.humidity}%</Text>
-                </View>
-                <View style={styles.subInfoItem}>
                   <Text style={styles.subInfoLabel}>Wind</Text>
-                  <Text style={styles.subInfoValue}>{weatherData.wind?.speed_kph} km/h</Text>
+                  <Text style={styles.subInfoValue}>{current.windspeed} km/h</Text>
                 </View>
+                <View style={styles.subInfoItem}>
+                  <Text style={styles.subInfoLabel}>Direction</Text>
+                  <Text style={styles.subInfoValue}>{current.winddirection}°</Text>
+                </View>
+                {daily && (
+                  <View style={styles.subInfoItem}>
+                    <Text style={styles.subInfoLabel}>H/L</Text>
+                    <Text style={styles.subInfoValue}>
+                      {daily.temperature_2m_max[0]?.toFixed(0)}° / {daily.temperature_2m_min[0]?.toFixed(0)}°
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
+
+            {hourly && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Hourly Forecast</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hourlyScroll}>
+                  {hourly.time.slice(0, 24).map((time, index) => (
+                    <View key={time} style={styles.hourlyItem}>
+                      <Text style={styles.hourlyTime}>{index === 0 ? 'Now' : formatTime(time).split(' ')[0]}</Text>
+                      <Icon 
+                        name={getWeatherIcon(hourly.weathercode[index], !!current.is_day)} 
+                        size={24} 
+                        color="#3b2c85" 
+                      />
+                      <Text style={styles.hourlyTemp}>{hourly.temperature_2m[index].toFixed(0)}°</Text>
+                      <View style={styles.humidityRow}>
+                        <Icon name="water" size={10} color="#60a5fa" />
+                        <Text style={styles.hourlyHumidity}>{hourly.relativehumidity_2m[index]}%</Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Air Quality Index</Text>
@@ -143,36 +220,37 @@ export default function WeatherScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Atmosphere</Text>
-              <View style={styles.grid}>
-                <View style={styles.gridItem}>
-                  <Icon name="eye-outline" size={20} color="#6b7280" />
-                  <Text style={styles.gridLabel}>Visibility</Text>
-                  <Text style={styles.gridValue}>{weatherData.atmosphere?.visibility_km} km</Text>
-                </View>
-                <View style={styles.gridItem}>
-                  <Icon name="speedometer-outline" size={20} color="#6b7280" />
-                  <Text style={styles.gridLabel}>Pressure</Text>
-                  <Text style={styles.gridValue}>{weatherData.atmosphere?.pressure_mb} mb</Text>
-                </View>
-                <View style={styles.gridItem}>
-                  <Icon name="sunny-outline" size={20} color="#6b7280" />
-                  <Text style={styles.gridLabel}>UV Index</Text>
-                  <Text style={styles.gridValue}>{weatherData.atmosphere?.uv_index}</Text>
-                </View>
-                <View style={styles.gridItem}>
-                  <Icon name="cloud-outline" size={20} color="#6b7280" />
-                  <Text style={styles.gridLabel}>Cloud Cover</Text>
-                  <Text style={styles.gridValue}>{weatherData.atmosphere?.cloud_cover}%</Text>
+            {daily && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Daily Summary</Text>
+                <View style={styles.dailyCard}>
+                  {daily.time.map((time, index) => (
+                    <View key={time} style={styles.dailyItem}>
+                      <Text style={styles.dailyDay}>{index === 0 ? 'Today' : getDayName(time)}</Text>
+                      <Icon 
+                        name={getWeatherIcon(daily.weathercode[index])} 
+                        size={24} 
+                        color="#3b2c85" 
+                        style={styles.dailyIcon}
+                      />
+                      <View style={styles.dailyTempRange}>
+                        <Text style={styles.dailyMaxTemp}>{daily.temperature_2m_max[index].toFixed(0)}°</Text>
+                        <View style={styles.tempBar} />
+                        <Text style={styles.dailyMinTemp}>{daily.temperature_2m_min[index].toFixed(0)}°</Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </View>
-            </View>
+            )}
           </>
         ) : (
           <View style={styles.errorContainer}>
             <Icon name="cloud-offline-outline" size={64} color="#d1d5db" />
             <Text style={styles.errorText}>Unable to load weather data</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -289,6 +367,45 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginLeft: 4,
   },
+  hourlyScroll: {
+    paddingVertical: 8,
+  },
+  hourlyItem: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 12,
+    marginRight: 12,
+    width: 70,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  hourlyTime: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  hourlyTemp: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+    marginTop: 8,
+  },
+  humidityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 2,
+  },
+  hourlyHumidity: {
+    fontSize: 10,
+    color: '#60a5fa',
+    fontWeight: '700',
+  },
   aqiCard: {
     flexDirection: 'row',
     backgroundColor: '#f0fdf4',
@@ -360,6 +477,60 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
   },
+  dailyCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  dailyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  dailyDay: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    width: 80,
+  },
+  dailyIcon: {
+    marginHorizontal: 20,
+  },
+  dailyTempRange: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  dailyMaxTemp: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    width: 30,
+    textAlign: 'right',
+  },
+  dailyMinTemp: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#9ca3af',
+    width: 30,
+    textAlign: 'right',
+  },
+  tempBar: {
+    height: 4,
+    width: 60,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
   errorContainer: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -368,5 +539,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#9ca3af',
     marginTop: 12,
+  },
+  retryButton: {
+    backgroundColor: '#3b2c85',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  retryText: {
+    color: '#ffffff',
+    fontWeight: '700',
   },
 });

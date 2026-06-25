@@ -434,29 +434,51 @@ export interface WeatherForecastResponse {
 
 export interface WeatherForecastData {
   location: WeatherLocationData;
-  temperature: {
+  hourly: {
+    time: string[];
+    temperature_2m: number[];
+    precipitation: number[];
+    windspeed_10m: number[];
+    relativehumidity_2m: number[];
+    weathercode: number[];
+  } | null;
+  daily: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    precipitation_sum: number[];
+    weathercode: number[];
+  } | null;
+  current_weather: {
+    time: string;
+    interval: number;
+    temperature: number;
+    windspeed: number;
+    winddirection: number;
+    is_day: number;
+    weathercode: number;
+  } | null;
+  // Legacy fields for backward compatibility
+  temperature?: {
     current_c: number;
     feels_like_c: number;
   } | null;
-  weather: {
+  weather?: {
     condition: string;
     condition_code: number;
     is_day: boolean;
   } | null;
-  atmosphere: {
+  atmosphere?: {
     humidity: number;
     uv_index: number;
     pressure_mb: number;
     visibility_km: number;
     cloud_cover: number;
   } | null;
-  wind: {
+  wind?: {
     speed_kph: number;
     direction: string;
   } | null;
-  hourly: any | null;
-  daily: any | null;
-  current_weather: any | null;
 }
 
 export interface WeatherLocationData {

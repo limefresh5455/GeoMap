@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,6 +17,7 @@ import { placeService } from '../services/placeService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
+import { useFocusEffect } from '@react-navigation/native';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'History'>;
@@ -29,7 +30,7 @@ export default function HistoryScreen({ navigation }: Props) {
   const [editReview, setEditReview] = useState('');
   const [editMood, setEditMood] = useState('');
   
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['visitStats'],
     queryFn: () => placeService.getVisitStats(),
     staleTime: 0,
@@ -42,6 +43,14 @@ export default function HistoryScreen({ navigation }: Props) {
       return response.data || [];
     },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchStats();
+      refetch();
+      return () => {};
+    }, [refetchStats, refetch])
+  );
 
   const updateVisitMutation = useMutation({
     mutationFn: ({ visitId, data }: { visitId: number; data: any }) => placeService.updateVisit(visitId, data),
@@ -155,14 +164,14 @@ export default function HistoryScreen({ navigation }: Props) {
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
-              {stats?.data?.total_visits ?? (stats as any)?.total_visits ?? 0}
+              {stats?.data?.total_visits ?? (stats as any)?.total_visits ?? (stats as any)?.totalVisits ?? 0}
             </Text>
             <Text style={styles.statLabel}>Total Visits</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
-              {stats?.data?.unique_places ?? (stats as any)?.unique_places ?? 0}
+              {stats?.data?.unique_places ?? (stats as any)?.unique_places ?? (stats as any)?.uniquePlaces ?? 0}
             </Text>
             <Text style={styles.statLabel}>Unique Places</Text>
           </View>

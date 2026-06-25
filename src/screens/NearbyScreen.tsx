@@ -81,48 +81,32 @@ const DEFAULT_FILTERS: FilterState = {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const getWeatherIcon = (code: number, isDay: boolean = true) => {
-  // Map weather codes (e.g. WeatherAPI) to Ionicons
   switch (code) {
-    case 1000:
-      return isDay ? 'sunny' : 'moon';
-    case 1003:
-      return isDay ? 'partly-sunny' : 'cloudy-night';
-    case 1006:
-    case 1009:
-      return 'cloudy';
-    case 1030:
-    case 1135:
-      return 'water';
-    case 1063:
-    case 1180:
-    case 1183:
-    case 1186:
-    case 1189:
-    case 1192:
-    case 1195:
-    case 1240:
-    case 1243:
-    case 1246:
-      return 'rainy';
-    case 1087:
-    case 1273:
-    case 1276:
-    case 1279:
-    case 1282:
-      return 'thunderstorm';
-    case 1114:
-    case 1117:
-    case 1210:
-    case 1213:
-    case 1216:
-    case 1219:
-    case 1222:
-    case 1225:
-    case 1255:
-    case 1258:
-      return 'snow';
-    default:
-      return 'thermometer';
+    case 0:
+    case 1: return isDay ? 'sunny' : 'moon';
+    case 2:
+    case 3: return isDay ? 'partly-sunny' : 'cloudy-night';
+    case 45:
+    case 48: return 'water';
+    case 51:
+    case 53:
+    case 55:
+    case 61:
+    case 63:
+    case 65:
+    case 80:
+    case 81:
+    case 82: return 'rainy';
+    case 71:
+    case 73:
+    case 75:
+    case 77:
+    case 85:
+    case 86: return 'snow';
+    case 95:
+    case 96:
+    case 99: return 'thunderstorm';
+    default: return 'thermometer';
   }
 };
 
@@ -478,19 +462,19 @@ export default function NearbyScreen({ navigation }: Props) {
             <View style={[styles.weatherPill, { opacity: 0.6 }]}>
               <ActivityIndicator size="small" color="#3b2c85" />
             </View>
-          ) : weatherData && weatherData.temperature ? (
+          ) : weatherData && weatherData.current_weather ? (
             <TouchableOpacity
               style={styles.weatherPill}
               onPress={() => navigation.navigate('Weather')}
               activeOpacity={0.7}
             >
               <Icon
-                name={getWeatherIcon(weatherData.weather?.condition_code || 1000, weatherData.weather?.is_day ?? true)}
+                name={getWeatherIcon(weatherData.current_weather.weathercode, !!weatherData.current_weather.is_day)}
                 size={18}
                 color="#3b2c85"
               />
               <Text style={styles.weatherPillText}>
-                {weatherData.temperature.current_c?.toFixed(0)}°
+                {weatherData.current_weather.temperature?.toFixed(0)}°
               </Text>
             </TouchableOpacity>
           ) : null
