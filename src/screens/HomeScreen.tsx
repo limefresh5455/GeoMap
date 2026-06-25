@@ -303,9 +303,6 @@ export default function HomeScreen({ navigation }: Props) {
               <ActivityIndicator size="small" color="#3b2c85" />
             </View>
           )}
-          <TouchableOpacity>
-            <Icon name="settings-outline" size={24} color="#111827" />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -359,10 +356,10 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
         
         <Text style={styles.addressText}>
-          {`Lat: ${location.latitude.toFixed(6)}, Lng: ${location.longitude.toFixed(6)}`}
+          {`Lat: ${location?.latitude.toFixed(6)}, Lng: ${location?.longitude.toFixed(6)}`}
         </Text>
-        {location.accuracy && (
-          <Text style={styles.accuracyText}>Accuracy: {location.accuracy.toFixed(2)} m</Text>
+        {location?.accuracy && (
+          <Text style={styles.accuracyText}>Accuracy: {location?.accuracy.toFixed(2)} m</Text>
         )}
 
         <View style={styles.buttonGroup}>
