@@ -18,6 +18,8 @@ import HistoryScreen from '../screens/HistoryScreen';
 import SavedPlacesScreen from '../screens/SavedPlacesScreen';
 import WeatherScreen from '../screens/WeatherScreen';
 import ComparisonScreen from '../screens/ComparisonScreen';
+import CompareBasicScreen from '../screens/CompareBasicScreen';
+import CompareRecommendScreen from '../screens/CompareRecommendScreen';
 
 export type AuthStackParamList = {
   Initial: undefined;
@@ -57,7 +59,9 @@ export type AuthStackParamList = {
   History: undefined;
   SavedPlaces: undefined;
   Weather: undefined;
-  Comparison: { placeIds: string[]; useBatch?: boolean };
+  Comparison: { placeIds: string[]; mode?: 'legacy' | 'batch' | 'basic' | 'recommend' };
+  CompareBasic: { placeIds: string[] };
+  CompareRecommend: { placeIds: string[] };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -111,6 +115,8 @@ export default function AuthNavigator() {
       <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
       <Stack.Screen name="Weather" component={WeatherScreen} />
       <Stack.Screen name="Comparison" component={ComparisonScreen} />
+      <Stack.Screen name="CompareBasic" component={CompareBasicScreen} />
+      <Stack.Screen name="CompareRecommend" component={CompareRecommendScreen} />
     </Stack.Navigator>
   );
 }

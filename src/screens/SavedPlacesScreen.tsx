@@ -11,6 +11,7 @@ import {
   Image,
   TextInput,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { placeService } from '../services/placeService';
@@ -100,9 +101,41 @@ export default function SavedPlacesScreen({ navigation }: Props) {
       Alert.alert('Select Places', 'Please select at least 2 places to compare.');
       return;
     }
-    navigation.navigate('Comparison', { placeIds: selectedPlaceIds, useBatch: true });
-    setIsCompareMode(false);
-    setSelectedPlaceIds([]);
+    
+    Alert.alert(
+      'Comparison Type',
+      'Choose how you want to compare these places:',
+      [
+        {
+          text: 'Detailed Table',
+          onPress: () => {
+            navigation.navigate('CompareBasic', { placeIds: selectedPlaceIds });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
+        },
+        {
+          text: 'Smart Recommendation',
+          onPress: () => {
+            navigation.navigate('CompareRecommend', { placeIds: selectedPlaceIds });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
+        },
+        {
+          text: 'Simple Table',
+          onPress: () => {
+            navigation.navigate('Comparison', { placeIds: selectedPlaceIds, useBatch: true });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
   };
 
   const renderSavedItem = ({ item }: { item: any }) => {
@@ -201,12 +234,20 @@ export default function SavedPlacesScreen({ navigation }: Props) {
               <Text style={styles.compareButtonText}>Compare</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
-              style={[styles.nearbyToggle, showNearbyOnly && styles.nearbyToggleActive]}
-              onPress={() => setShowNearbyOnly(!showNearbyOnly)}
-            >
-              <Icon name="navigate-outline" size={20} color={showNearbyOnly ? "#ffffff" : "#3b2c85"} />
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.nearbyToggle, { width: 'auto', paddingHorizontal: 12, borderRadius: 20, gap: 6, flexDirection: 'row', marginRight: 8 }]}
+                onPress={() => setIsCompareMode(true)}>
+                <Icon name="git-compare-outline" size={18} color="#3b2c85" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#3b2c85' }}>Compare</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.nearbyToggle, showNearbyOnly && styles.nearbyToggleActive]}
+                onPress={() => setShowNearbyOnly(!showNearbyOnly)}
+              >
+                <Icon name="navigate-outline" size={20} color={showNearbyOnly ? "#ffffff" : "#3b2c85"} />
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </View>

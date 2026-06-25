@@ -3,7 +3,6 @@ import {
   StyleSheet,
   Text,
   View,
-  
   TouchableOpacity,
   Image,
   FlatList,
@@ -19,10 +18,11 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import MapView, { PROVIDER_GOOGLE, Marker, Circle } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { locationService } from '../services/locationService';
 import { weatherService } from '../services/weatherService';
 import { discoveryService } from '../services/discoveryService';
+import { placeService } from '../services/placeService';
 import { AutocompletePrediction } from '../services/types';
 import Config from 'react-native-config';
 import {
@@ -33,7 +33,7 @@ import {
   getPlaceTypeIcon,
   getPlaceTypeLabel,
 } from '../constants/placeTypes';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Nearby'>;
@@ -78,7 +78,7 @@ const DEFAULT_FILTERS: FilterState = {
   rank_preference: 'POPULARITY',
 };
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const getWeatherIcon = (code: number, isDay: boolean = true) => {
   switch (code) {
@@ -111,6 +111,8 @@ const getWeatherIcon = (code: number, isDay: boolean = true) => {
 };
 
 export default function NearbyScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [tempFilters, setTempFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -122,52 +124,6 @@ export default function NearbyScreen({ navigation }: Props) {
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [autocompleteResults, setAutocompleteResults] = useState<AutocompletePrediction[]>([]);
   const mapRef = useRef<MapView>(null);
-
-  // ... existing queries ...
-
-  const { data: autocompleteData, isFetching: autocompleteLoading } = useQuery({
-    queryKey: ['autocomplete', searchQuery],
-    queryFn: () => discoveryService.autocomplete(searchQuery, userLocation?.latitude, userLocation?.longitude),
-    enabled: searchQuery.length > 2 && isSearchVisible,
-  });
-
-  useEffect(() => {
-    if (autocompleteData?.predictions) {
-      setAutocompleteResults(autocompleteData.predictions);
-    } else {
-      setAutocompleteResults([]);
-    }
-  }, [autocompleteData]);
-
-  const handleAutocompleteSelect = (prediction: AutocompletePrediction) => {
-    setSearchQuery(prediction.main_text);
-    setAutocompleteResults([]);
-    // Trigger search with the selected place
-    refetchPlaces();
-  };
-
-  const togglePlaceSelection = (placeId: string) => {
-    setSelectedPlaceIds(prev => {
-      if (prev.includes(placeId)) {
-        return prev.filter(id => id !== placeId);
-      }
-      if (prev.length >= 10) {
-        Alert.alert('Limit Reached', 'You can compare up to 10 places at once.');
-        return prev;
-      }
-      return [...prev, placeId];
-    });
-  };
-
-  const handleCompare = () => {
-    if (selectedPlaceIds.length < 2) {
-      Alert.alert('Select Places', 'Please select at least 2 places to compare.');
-      return;
-    }
-    navigation.navigate('Comparison', { placeIds: selectedPlaceIds, useBatch: false });
-    setIsCompareMode(false);
-    setSelectedPlaceIds([]);
-  };
 
   // Fetch user's saved location
   const { data: userLocation, isLoading: locationLoading } = useQuery({
@@ -218,7 +174,7 @@ export default function NearbyScreen({ navigation }: Props) {
       try {
         if (showSavedOnly) {
           const response = await placeService.getSavedNearby();
-          return (response?.data || []) as NearbyPlace[];
+          return (response?.data || []) as unknown as NearbyPlace[];
         }
 
         if (searchQuery.length > 2) {
@@ -237,12 +193,7 @@ export default function NearbyScreen({ navigation }: Props) {
           payload.included_types = activeFilters.included_types;
         }
 
-        if (activeFilters.excluded_types.length > 0) {
-          payload.excluded_types = activeFilters.excluded_types;
-        }
-
         const response = await discoveryService.nearbySearch(payload);
-    
         return (response?.data || []) as NearbyPlace[];
       } catch (error: any) {
         console.log('Search error:', error.message);
@@ -253,36 +204,86 @@ export default function NearbyScreen({ navigation }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Effect to trigger search when searchQuery is cleared
-  useEffect(() => {
-    if (searchQuery === '' && !showSavedOnly) {
-      refetchPlaces();
-    }
-  }, [searchQuery, showSavedOnly]);
+  const { data: autocompleteData, isFetching: autocompleteLoading } = useQuery({
+    queryKey: ['autocomplete', searchQuery],
+    queryFn: () => discoveryService.autocomplete(searchQuery, userLocation?.latitude, userLocation?.longitude),
+    enabled: searchQuery.length > 2 && isSearchVisible,
+  });
 
-  // Animate map when places load
   useEffect(() => {
-    if (userLocation && mapRef.current) {
-      const radiusInDegrees = activeFilters.radius / 111000; // rough conversion
-      mapRef.current.animateToRegion(
+    if (autocompleteData?.predictions) {
+      setAutocompleteResults(autocompleteData.predictions);
+    } else {
+      setAutocompleteResults([]);
+    }
+  }, [autocompleteData]);
+
+  const handleAutocompleteSelect = (prediction: AutocompletePrediction) => {
+    setSearchQuery(prediction.main_text);
+    setAutocompleteResults([]);
+    refetchPlaces();
+  };
+
+  const togglePlaceSelection = (placeId: string) => {
+    setSelectedPlaceIds(prev => {
+      if (prev.includes(placeId)) {
+        return prev.filter(id => id !== placeId);
+      }
+      if (prev.length >= 10) {
+        Alert.alert('Limit Reached', 'You can compare up to 10 places at once.');
+        return prev;
+      }
+      return [...prev, placeId];
+    });
+  };
+
+  const handleCompare = () => {
+    if (selectedPlaceIds.length < 2) {
+      Alert.alert('Select Places', 'Please select at least 2 places to compare.');
+      return;
+    }
+    
+    Alert.alert(
+      'Comparison Type',
+      'Choose how you want to compare these places:',
+      [
         {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          latitudeDelta: radiusInDegrees * 2.5,
-          longitudeDelta: radiusInDegrees * 2.5,
+          text: 'Detailed Table',
+          onPress: () => {
+            navigation.navigate('CompareBasic', { placeIds: selectedPlaceIds });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
         },
-        500,
-      );
-    }
-  }, [userLocation, activeFilters.radius]);
+        {
+          text: 'Smart Recommendation',
+          onPress: () => {
+            navigation.navigate('CompareRecommend', { placeIds: selectedPlaceIds });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
+        },
+        {
+          text: 'Simple Table',
+          onPress: () => {
+            navigation.navigate('Comparison', { placeIds: selectedPlaceIds });
+            setIsCompareMode(false);
+            setSelectedPlaceIds([]);
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
+  };
 
-  // Build photo URL from first_photo_name
   const getPhotoUrl = (photoName: string | null): string | null => {
     if (!photoName) return null;
     return `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=400&key=${Config.GOOGLE_MAPS_API_KEY}`;
   };
 
-  // Filter modal handlers
   const openFilterModal = () => {
     setTempFilters({ ...activeFilters });
     setFilterModalVisible(true);
@@ -402,7 +403,6 @@ export default function NearbyScreen({ navigation }: Props) {
     );
   };
 
-  // Loading state
   if (locationLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -415,11 +415,86 @@ export default function NearbyScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+    <View style={styles.safeArea}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Map Container */}
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          initialRegion={{
+            latitude: userLocation?.latitude ?? 0,
+            longitude: userLocation?.longitude ?? 0,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          }}
+          scrollEnabled={true}
+          zoomEnabled={true}>
+          {userLocation && (
+            <>
+              <Circle
+                center={userLocation}
+                radius={activeFilters.radius * 0.6}
+                fillColor="rgba(59, 44, 133, 0.2)"
+                strokeColor="transparent"
+              />
+              <Circle
+                center={userLocation}
+                radius={activeFilters.radius}
+                fillColor="rgba(59, 44, 133, 0.06)"
+                strokeColor="rgba(59, 44, 133, 0.2)"
+                strokeWidth={1}
+              />
+              <Marker coordinate={userLocation} anchor={{ x: 0.5, y: 0.5 }}>
+                <View style={styles.centerDotGlow}>
+                  <View style={styles.centerDot} />
+                </View>
+              </Marker>
+            </>
+          )}
+
+          {nearbyPlaces?.map(place => (
+            <Marker
+              key={place.place_id}
+              coordinate={{
+                latitude: place.latitude || 0,
+                longitude: place.longitude || 0,
+              }}
+              title={place.display_name}
+              onCalloutPress={() =>
+                navigation.navigate('PlaceDetails', {
+                  placeId: place.place_id,
+                  placeName: place.display_name,
+                  formatted_address: place.formatted_address,
+                  latitude: place.latitude,
+                  longitude: place.longitude,
+                  rating: place.rating || 0,
+                  user_rating_count: place.user_rating_count || 0,
+                })
+              }>
+              <View style={styles.mapIconContainer}>
+                <Icon
+                  name={getPlaceTypeIcon(place.primary_type)}
+                  size={14}
+                  color="#3b2c85"
+                />
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+
+        {isFetching && (
+          <View style={styles.fetchingOverlay}>
+            <ActivityIndicator size="small" color="#3b2c85" />
+            <Text style={styles.fetchingText}>Searching...</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Floating Header */}
+      <View style={[styles.header, { top: insets.top + 10 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
@@ -432,55 +507,64 @@ export default function NearbyScreen({ navigation }: Props) {
           }}>
           <Icon name={isCompareMode ? "close" : "arrow-back"} size={22} color="#111827" />
         </TouchableOpacity>
+        
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>
-            {isCompareMode ? `${selectedPlaceIds.length} Selected` : 'Nearby Places'}
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {isCompareMode ? `${selectedPlaceIds.length} Selected` : 'Nearby'}
           </Text>
-          <Text style={styles.headerSubtitle}>
-            {isCompareMode ? 'Select 2-10 places' : `${nearbyPlaces?.length ?? 0} places nearby`}
-          </Text>
+          {!isCompareMode && (
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {nearbyPlaces?.length ?? 0} places
+            </Text>
+          )}
         </View>
         
         {!isCompareMode && (
-          <TouchableOpacity
-            style={[styles.headerIconButton, showSavedOnly && styles.headerIconButtonActive]}
-            onPress={() => setShowSavedOnly(!showSavedOnly)}>
-            <Icon name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={20} color={showSavedOnly ? "#ffffff" : "#3b2c85"} />
-          </TouchableOpacity>
-        )}
-
-        {!isCompareMode && (
-          <TouchableOpacity
-            style={styles.headerIconButton}
-            onPress={() => setIsSearchVisible(!isSearchVisible)}>
-            <Icon name="search-outline" size={20} color="#3b2c85" />
-          </TouchableOpacity>
-        )}
-
-        {!isCompareMode && (
-          weatherLoading ? (
-            <View style={[styles.weatherPill, { opacity: 0.6 }]}>
-              <ActivityIndicator size="small" color="#3b2c85" />
-            </View>
-          ) : weatherData && weatherData.current_weather ? (
+          <>
             <TouchableOpacity
-              style={styles.weatherPill}
-              onPress={() => navigation.navigate('Weather')}
-              activeOpacity={0.7}
-            >
-              <Icon
-                name={getWeatherIcon(weatherData.current_weather.weathercode, !!weatherData.current_weather.is_day)}
-                size={18}
-                color="#3b2c85"
-              />
-              <Text style={styles.weatherPillText}>
-                {weatherData.current_weather.temperature?.toFixed(0)}°
-              </Text>
+              style={styles.headerIconButton}
+              onPress={() => setIsCompareMode(true)}>
+              <Icon name="git-compare-outline" size={20} color="#3b2c85" />
             </TouchableOpacity>
-          ) : null
+
+            <TouchableOpacity
+              style={[styles.headerIconButton, showSavedOnly && styles.headerIconButtonActive]}
+              onPress={() => setShowSavedOnly(!showSavedOnly)}>
+              <Icon name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={20} color={showSavedOnly ? "#ffffff" : "#3b2c85"} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.headerIconButton}
+              onPress={() => setIsSearchVisible(!isSearchVisible)}>
+              <Icon name="search-outline" size={20} color="#3b2c85" />
+            </TouchableOpacity>
+
+            {weatherData?.current_weather && (
+              <TouchableOpacity
+                style={styles.weatherPill}
+                onPress={() => navigation.navigate('Weather')}
+              >
+                <Icon
+                  name={getWeatherIcon(weatherData.current_weather.weathercode, !!weatherData.current_weather.is_day)}
+                  size={18}
+                  color="#3b2c85"
+                />
+                <Text style={styles.weatherPillText}>
+                  {weatherData.current_weather.temperature?.toFixed(0)}°
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
+              onPress={openFilterModal}>
+              <Icon name="options-outline" size={20} color={hasActiveFilters ? '#ffffff' : '#3b2c85'} />
+              {hasActiveFilters && <View style={styles.filterDot} />}
+            </TouchableOpacity>
+          </>
         )}
 
-        {isCompareMode ? (
+        {isCompareMode && (
           <TouchableOpacity
             style={[styles.compareButton, selectedPlaceIds.length < 2 && styles.compareButtonDisabled]}
             onPress={handleCompare}
@@ -488,25 +572,12 @@ export default function NearbyScreen({ navigation }: Props) {
           >
             <Text style={styles.compareButtonText}>Compare</Text>
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              hasActiveFilters && styles.filterButtonActive,
-            ]}
-            onPress={openFilterModal}>
-            <Icon
-              name="options-outline"
-              size={20}
-              color={hasActiveFilters ? '#ffffff' : '#3b2c85'}
-            />
-            {hasActiveFilters && <View style={styles.filterDot} />}
-          </TouchableOpacity>
         )}
       </View>
 
+      {/* Search Bar */}
       {isSearchVisible && (
-        <View style={styles.searchBarContainer}>
+        <View style={[styles.searchBarContainer, { top: insets.top + 70 }]}>
           <View style={styles.searchInputWrapper}>
             <Icon name="search" size={18} color="#9ca3af" />
             <TextInput
@@ -547,94 +618,7 @@ export default function NearbyScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* Map */}
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          initialRegion={{
-            latitude: userLocation?.latitude ?? 0,
-            longitude: userLocation?.longitude ?? 0,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-          scrollEnabled={true}
-          zoomEnabled={true}>
-          {/* Radius circles */}
-          {userLocation && (
-            <>
-              <Circle
-                center={userLocation}
-                radius={activeFilters.radius * 0.6}
-                fillColor="rgba(59, 44, 133, 0.2)"
-                strokeColor="transparent"
-              />
-              <Circle
-                center={userLocation}
-                radius={activeFilters.radius}
-                fillColor="rgba(59, 44, 133, 0.06)"
-                strokeColor="rgba(59, 44, 133, 0.2)"
-                strokeWidth={1}
-              />
-            </>
-          )}
-
-          {/* Place markers */}
-          {nearbyPlaces?.map(place => (
-            <Marker
-              key={place.place_id}
-              coordinate={{
-                latitude: place.latitude,
-                longitude: place.longitude,
-              }}
-              title={place.display_name}
-              description={place.formatted_address}
-              onCalloutPress={() =>
-                navigation.navigate('PlaceDetails', {
-                  placeId: place.place_id,
-                  placeName: place.display_name,
-                  formatted_address:place?.formatted_address,
-            latitude:place?.latitude,
-            longitude:place?.longitude,
-            google_maps_uri:place?.google_maps_uri,
-            open_now:place?.open_now,
-            photoUrl:getPhotoUrl(place?.first_photo_name),
-            typeIcon:getPlaceTypeIcon(place.primary_type),
-            rating:place?.rating as number,
-            user_rating_count:place?.user_rating_count as number
-                })
-              }>
-              <View style={styles.mapIconContainer}>
-                <Icon
-                  name={getPlaceTypeIcon(place.primary_type)}
-                  size={14}
-                  color="#3b2c85"
-                />
-              </View>
-            </Marker>
-          ))}
-
-          {/* Center user dot */}
-          {userLocation && (
-            <Marker coordinate={userLocation} anchor={{ x: 0.5, y: 0.5 }}>
-              <View style={styles.centerDotGlow}>
-                <View style={styles.centerDot} />
-              </View>
-            </Marker>
-          )}
-        </MapView>
-
-        {/* Fetching overlay */}
-        {isFetching && (
-          <View style={styles.fetchingOverlay}>
-            <ActivityIndicator size="small" color="#3b2c85" />
-            <Text style={styles.fetchingText}>Searching...</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Bottom Sheet — Places List */}
+      {/* Bottom Sheet */}
       <View style={styles.bottomSheet}>
         <View style={styles.bottomSheetHandle} />
         {placesLoading ? (
@@ -646,21 +630,22 @@ export default function NearbyScreen({ navigation }: Props) {
           <FlatList
             data={nearbyPlaces}
             keyExtractor={item => item.place_id}
-            showsVerticalScrollIndicator={false}
             renderItem={renderPlaceCard}
             contentContainerStyle={{ paddingBottom: 20 }}
+            showsVerticalScrollIndicator={false}
           />
         ) : (
           <View style={styles.emptyContainer}>
-            <Icon name="location-outline" size={48} color="#d1d5db" />
+            <Icon name="map-outline" size={48} color="#d1d5db" />
             <Text style={styles.emptyTitle}>No places found</Text>
-            <Text style={styles.emptySubtitle}>
-              Try adjusting your filters or increasing the radius
-            </Text>
+            <Text style={styles.emptySubtitle}>Try adjusting your filters or searching in a different area.</Text>
             <TouchableOpacity
               style={styles.emptyButton}
-              onPress={openFilterModal}>
-              <Text style={styles.emptyButtonText}>Adjust Filters</Text>
+              onPress={() => {
+                setSearchQuery('');
+                resetFilters();
+              }}>
+              <Text style={styles.emptyButtonText}>Reset All</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -674,86 +659,52 @@ export default function NearbyScreen({ navigation }: Props) {
         onRequestClose={() => setFilterModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Places</Text>
-              <TouchableOpacity
-                onPress={() => setFilterModalVisible(false)}
-                style={styles.modalCloseButton}>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)} style={styles.modalCloseButton}>
                 <Icon name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.modalScrollContent}>
-              {/* What are you looking for? (Place Categories) */}
-              <Text style={styles.filterSectionTitle}>
-                What are you looking for?
-              </Text>
-              <Text style={styles.filterSectionSubtitle}>
-                Select categories to filter results
-              </Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
+              <Text style={styles.filterSectionTitle}>What are you looking for?</Text>
+              <Text style={styles.filterSectionSubtitle}>Select categories to filter results</Text>
 
               {PLACE_TYPE_CATEGORIES.map(category => {
                 const isExpanded = expandedCategory === category.id;
-                const selectedCount = category.types.filter(t =>
-                  tempFilters.included_types.includes(t.value),
-                ).length;
+                const selectedCount = category.types.filter(t => tempFilters.included_types.includes(t.value)).length;
 
                 return (
                   <View key={category.id} style={styles.categoryBlock}>
                     <TouchableOpacity
                       style={styles.categoryHeader}
-                      onPress={() =>
-                        setExpandedCategory(isExpanded ? null : category.id)
-                      }
-                      activeOpacity={0.7}>
+                      onPress={() => setExpandedCategory(isExpanded ? null : category.id)}
+                    >
                       <View style={styles.categoryHeaderLeft}>
                         <View style={styles.categoryIconContainer}>
-                          <Icon
-                            name={category.icon}
-                            size={18}
-                            color="#3b2c85"
-                          />
+                          <Icon name={category.icon} size={18} color="#3b2c85" />
                         </View>
-                        <Text style={styles.categoryLabel}>
-                          {category.label}
-                        </Text>
+                        <Text style={styles.categoryLabel}>{category.label}</Text>
                         {selectedCount > 0 && (
                           <View style={styles.selectedBadge}>
-                            <Text style={styles.selectedBadgeText}>
-                              {selectedCount}
-                            </Text>
+                            <Text style={styles.selectedBadgeText}>{selectedCount}</Text>
                           </View>
                         )}
                       </View>
-                      <Icon
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={18}
-                        color="#9ca3af"
-                      />
+                      <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color="#9ca3af" />
                     </TouchableOpacity>
 
                     {isExpanded && (
                       <View style={styles.categoryTypes}>
                         {category.types.map(type => {
-                          const isSelected =
-                            tempFilters.included_types.includes(type.value);
+                          const isSelected = tempFilters.included_types.includes(type.value);
                           return (
                             <TouchableOpacity
                               key={type.value}
-                              style={[
-                                styles.typeChip,
-                                isSelected && styles.typeChipSelected,
-                              ]}
+                              style={[styles.typeChip, isSelected && styles.typeChipSelected]}
                               onPress={() => toggleIncludedType(type.value)}
-                              activeOpacity={0.7}>
-                              <Text
-                                style={[
-                                  styles.typeChipText,
-                                  isSelected && styles.typeChipTextSelected,
-                                ]}>
+                            >
+                              <Text style={[styles.typeChipText, isSelected && styles.typeChipTextSelected]}>
                                 {type.label}
                               </Text>
                             </TouchableOpacity>
@@ -765,132 +716,35 @@ export default function NearbyScreen({ navigation }: Props) {
                 );
               })}
 
-              {/* Selected types summary */}
-              {tempFilters.included_types.length > 0 && (
-                <View style={styles.selectedSummary}>
-                  <Text style={styles.selectedSummaryTitle}>
-                    Selected ({tempFilters.included_types.length})
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}>
-                    {tempFilters.included_types.map(typeValue => (
-                      <TouchableOpacity
-                        key={typeValue}
-                        style={styles.selectedTypeChip}
-                        onPress={() => toggleIncludedType(typeValue)}>
-                        <Text style={styles.selectedTypeChipText}>
-                          {getPlaceTypeLabel(typeValue)}
-                        </Text>
-                        <Icon name="close-circle" size={14} color="#ffffff" />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* Rank Preference */}
-              <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>
-                Sort By
-              </Text>
+              <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>Sort By</Text>
               <View style={styles.optionRow}>
                 {RANK_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[
-                      styles.optionButton,
-                      tempFilters.rank_preference === opt.value &&
-                        styles.optionButtonSelected,
-                    ]}
-                    onPress={() =>
-                      setTempFilters(prev => ({
-                        ...prev,
-                        rank_preference: opt.value,
-                      }))
-                    }
-                    activeOpacity={0.7}>
+                    style={[styles.optionButton, tempFilters.rank_preference === opt.value && styles.optionButtonSelected]}
+                    onPress={() => setTempFilters(prev => ({ ...prev, rank_preference: opt.value }))}
+                  >
                     <Icon
-                      name={
-                        opt.value === 'POPULARITY'
-                          ? 'trending-up-outline'
-                          : 'navigate-outline'
-                      }
+                      name={opt.value === 'POPULARITY' ? 'trending-up-outline' : 'navigate-outline'}
                       size={16}
-                      color={
-                        tempFilters.rank_preference === opt.value
-                          ? '#ffffff'
-                          : '#6b7280'
-                      }
+                      color={tempFilters.rank_preference === opt.value ? '#ffffff' : '#6b7280'}
                     />
-                    <Text
-                      style={[
-                        styles.optionButtonText,
-                        tempFilters.rank_preference === opt.value &&
-                          styles.optionButtonTextSelected,
-                      ]}>
+                    <Text style={[styles.optionButtonText, tempFilters.rank_preference === opt.value && styles.optionButtonTextSelected]}>
                       {opt.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Radius */}
-              <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>
-                Search Radius
-              </Text>
+              <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>Search Radius</Text>
               <View style={styles.optionRow}>
                 {RADIUS_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[
-                      styles.optionButton,
-                      styles.optionButtonSmall,
-                      tempFilters.radius === opt.value &&
-                        styles.optionButtonSelected,
-                    ]}
-                    onPress={() =>
-                      setTempFilters(prev => ({ ...prev, radius: opt.value }))
-                    }
-                    activeOpacity={0.7}>
-                    <Text
-                      style={[
-                        styles.optionButtonText,
-                        tempFilters.radius === opt.value &&
-                          styles.optionButtonTextSelected,
-                      ]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Max Results */}
-              <Text style={[styles.filterSectionTitle, { marginTop: 24 }]}>
-                Max Results
-              </Text>
-              <View style={styles.optionRow}>
-                {MAX_RESULT_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      styles.optionButton,
-                      styles.optionButtonSmall,
-                      tempFilters.max_result_count === opt.value &&
-                        styles.optionButtonSelected,
-                    ]}
-                    onPress={() =>
-                      setTempFilters(prev => ({
-                        ...prev,
-                        max_result_count: opt.value,
-                      }))
-                    }
-                    activeOpacity={0.7}>
-                    <Text
-                      style={[
-                        styles.optionButtonText,
-                        tempFilters.max_result_count === opt.value &&
-                          styles.optionButtonTextSelected,
-                      ]}>
+                    style={[styles.optionButton, styles.optionButtonSmall, tempFilters.radius === opt.value && styles.optionButtonSelected]}
+                    onPress={() => setTempFilters(prev => ({ ...prev, radius: opt.value }))}
+                  >
+                    <Text style={[styles.optionButtonText, tempFilters.radius === opt.value && styles.optionButtonTextSelected]}>
                       {opt.label}
                     </Text>
                   </TouchableOpacity>
@@ -898,17 +752,12 @@ export default function NearbyScreen({ navigation }: Props) {
               </View>
             </ScrollView>
 
-            {/* Modal Footer */}
             <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={resetFilters}>
+              <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
                 <Icon name="refresh-outline" size={18} color="#6b7280" />
                 <Text style={styles.resetButtonText}>Reset</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.applyButton}
-                onPress={applyFilters}>
+              <TouchableOpacity style={styles.applyButton} onPress={applyFilters}>
                 <Text style={styles.applyButtonText}>Apply Filters</Text>
                 <Icon name="checkmark" size={18} color="#ffffff" />
               </TouchableOpacity>
@@ -916,7 +765,7 @@ export default function NearbyScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -935,20 +784,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#6b7280',
   },
-
-  // Header
   header: {
     position: 'absolute',
-    top: 50,
-    left: 16,
-    right: 16,
+    left: 12,
+    right: 12,
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: '#ffffff',
-
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   backButton: {
     width: 36,
@@ -960,25 +811,52 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     flex: 1,
-    marginLeft: 12,
+    marginHorizontal: 12,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#111827',
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#6b7280',
-    marginTop: 1,
   },
-  filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 6,
+  },
+  headerIconButtonActive: {
+    backgroundColor: '#3b2c85',
+  },
+  weatherPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 6,
+    gap: 4,
+  },
+  weatherPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3b2c85',
+  },
+  filterButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 6,
   },
   filterButtonActive: {
     backgroundColor: '#3b2c85',
@@ -994,10 +872,37 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#3b2c85',
   },
-
-  // Map
+  searchBarContainer: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 99,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 15,
+    color: '#111827',
+    padding: 0,
+  },
   mapContainer: {
-    flex: 0.65,
+    flex: 1,
     backgroundColor: '#e5e7eb',
   },
   map: {
@@ -1036,7 +941,7 @@ const styles = StyleSheet.create({
   },
   fetchingOverlay: {
     position: 'absolute',
-    top: 10,
+    top: 80,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1056,21 +961,22 @@ const styles = StyleSheet.create({
     color: '#3b2c85',
     fontWeight: '600',
   },
-
-  // Bottom Sheet
   bottomSheet: {
-    flex: 0.35,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '40%',
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -16,
     paddingHorizontal: 20,
     paddingTop: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
   },
   bottomSheetHandle: {
     width: 36,
@@ -1079,69 +985,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
     alignSelf: 'center',
     marginBottom: 16,
-  },
-
-  // Place card
-  headerIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  headerIconButtonActive: {
-    backgroundColor: '#3b2c85',
-  },
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: '#ffffff',
-  },
-  searchInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: '#111827',
-    padding: 0,
-  },
-  autocompleteContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    maxHeight: 200,
-    overflow: 'hidden',
-  },
-  autocompleteItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  autocompleteTextContainer: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  autocompleteMainText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  autocompleteSecondaryText: {
-    fontSize: 12,
-    color: '#6b7280',
   },
   placeCard: {
     flexDirection: 'row',
@@ -1173,12 +1016,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#3b2c85',
     borderColor: '#3b2c85',
   },
-  placeImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: '#f3f4f6',
-  },
   compareButton: {
     backgroundColor: '#3b2c85',
     paddingHorizontal: 16,
@@ -1192,6 +1029,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  placeImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#f3f4f6',
   },
   placeImagePlaceholder: {
     justifyContent: 'center',
@@ -1248,8 +1091,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#9ca3af',
   },
-
-  // Empty state
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1281,8 +1122,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-
-  // List loading
   listLoadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1293,8 +1132,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
   },
-
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -1335,8 +1172,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
   },
-
-  // Filter sections
   filterSectionTitle: {
     fontSize: 16,
     fontWeight: '700',
@@ -1348,8 +1183,6 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginBottom: 12,
   },
-
-  // Category blocks
   categoryBlock: {
     marginBottom: 2,
     borderBottomWidth: 1,
@@ -1393,8 +1226,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-
-  // Type chips
   categoryTypes: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1422,35 +1253,6 @@ const styles = StyleSheet.create({
   typeChipTextSelected: {
     color: '#ffffff',
   },
-
-  // Selected summary
-  selectedSummary: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  selectedSummaryTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginBottom: 8,
-  },
-  selectedTypeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#3b2c85',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    gap: 4,
-  },
-  selectedTypeChipText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-
-  // Option buttons (Rank, Radius, Max Results)
   optionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1484,8 +1286,6 @@ const styles = StyleSheet.create({
   optionButtonTextSelected: {
     color: '#ffffff',
   },
-
-  // Modal footer
   modalFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1524,23 +1324,33 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
   },
-
-  // Weather Styles
-  weatherPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    gap: 6,
+  autocompleteContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginTop: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    maxHeight: 200,
+    overflow: 'hidden',
   },
-  weatherPillText: {
+  autocompleteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  autocompleteTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  autocompleteMainText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#3b2c85',
+    fontWeight: '600',
+    color: '#111827',
+  },
+  autocompleteSecondaryText: {
+    fontSize: 12,
+    color: '#6b7280',
   },
 });

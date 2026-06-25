@@ -628,13 +628,42 @@ export interface ComparePlacesRequest {
   fields?: string[] | null;
 }
 
+export interface PhotoReference {
+  name: string;
+  width_px: number;
+  height_px: number;
+}
+
+export interface ReviewData {
+  author_name: string;
+  rating: number;
+  text: string;
+  relative_time: string;
+}
+
+export interface UserContextData {
+  is_saved: boolean;
+  saved_id: number | null;
+  saved_at: string | null;
+  tags: string[];
+  notes: string | null;
+  has_visited: boolean;
+  visited_at: string | null;
+  your_rating: number | null;
+  your_review: string | null;
+  visit_mood: string | null;
+  visited_with: string | null;
+}
+
 export interface ComparisonResult {
   place_id: string;
   display_name: string | null;
   formatted_address: string | null;
   primary_type: string | null;
+  types?: string[] | null;
   latitude: number | null;
   longitude: number | null;
+  distance_from_you_km?: number | null;
   rating: number | null;
   user_rating_count: number | null;
   price_level: string | null;
@@ -644,8 +673,10 @@ export interface ComparisonResult {
   wheelchair_accessible: boolean | null;
   website_uri: string | null;
   phone_number: string | null;
+  google_maps_uri?: string | null;
   editorial_summary: string | null;
-  photo_name: string | null;
+  photo_references?: PhotoReference[] | null;
+  top_reviews?: ReviewData[] | null;
   dine_in: boolean | null;
   takeout: boolean | null;
   delivery: boolean | null;
@@ -664,6 +695,7 @@ export interface ComparisonResult {
   good_for_groups: boolean | null;
   live_music: boolean | null;
   reservable: boolean | null;
+  allows_dogs?: boolean | null;
   parking_free: boolean | null;
   parking_paid: boolean | null;
   parking_valet: boolean | null;
@@ -674,13 +706,69 @@ export interface ComparisonResult {
   payment_nfc: boolean | null;
   wikipedia_extract: string | null;
   neighborhood: string | null;
+  your_context?: UserContextData | null;
+}
+
+export interface AttributeTableRow {
+  key: string;
+  label: string;
+  values: {
+    place_id: string;
+    value: string;
+    label: string;
+  }[];
 }
 
 export interface ComparePlacesResponse {
   success: boolean;
   message: string;
   comparison: ComparisonResult[];
-  highlights: any | null;
+  highlights: Record<string, any> | null;
   total_places: number;
+  timestamp: string;
+}
+
+export interface CompareBasicResponse {
+  success: boolean;
+  message: string;
+  places: ComparisonResult[];
+  attribute_table: AttributeTableRow[];
+  highlights: Record<string, any> | null;
+  total_places: number;
+  user_location_used: boolean;
+  timestamp: string;
+}
+
+export interface RecommendationResult {
+  rank: number;
+  place_id: string;
+  display_name: string | null;
+  primary_type: string | null;
+  formatted_address: string | null;
+  latitude: number;
+  longitude: number;
+  rating: number | null;
+  price_level: string | null;
+  photo_references?: PhotoReference[] | null;
+  overall_score: number;
+  score_breakdown: {
+    rating: number;
+    popularity: number;
+    price_fit: number;
+    amenities: number;
+    proximity: number;
+    user_affinity: number;
+  };
+  strengths: string[];
+  your_context?: UserContextData | null;
+  ai_summary: string | null;
+}
+
+export interface CompareRecommendResponse {
+  success: boolean;
+  message: string;
+  recommendations: RecommendationResult[];
+  overall_ai_summary: string | null;
+  total_places_compared: number;
   timestamp: string;
 }

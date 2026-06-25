@@ -19,24 +19,23 @@ import { AuthStackParamList } from '../navigation/AuthNavigator';
 import Config from 'react-native-config';
 
 type Props = {
-  navigation: NativeStackNavigationProp<AuthStackParamList, 'Comparison'>;
+  navigation: NativeStackNavigationProp<AuthStackParamList, 'CompareBasic'>;
   route: { params: { placeIds: string[] } };
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export default function ComparisonScreen({ navigation, route }: Props) {
-  const { placeIds, useBatch = false } = route.params;
+export default function CompareBasicScreen({ navigation, route }: Props) {
+  const { placeIds } = route.params;
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['comparePlaces', placeIds, useBatch],
-    queryFn: () => useBatch 
-      ? comparisonService.compareBatch(placeIds)
-      : comparisonService.compare({ place_ids: placeIds }),
+    queryKey: ['compareBasic', placeIds],
+    queryFn: () => comparisonService.compareBasic({ place_ids: placeIds }),
     enabled: placeIds && placeIds.length > 0,
   });
 
-  const comparisonData = data?.comparison || [];
+  const comparisonData = data?.places || [];
+  const attributeTable = data?.attribute_table || [];
   const highlights = data?.highlights || {};
 
   const numPlaces = comparisonData.length;
@@ -89,9 +88,36 @@ export default function ComparisonScreen({ navigation, route }: Props) {
         scrollEnabled={isScrollable}
         contentContainerStyle={!isScrollable && { flexGrow: 1 }}
       >
-        {comparisonData.map((item: any) => (
+        {comparisonData.map((item) => (
           <View key={item.place_id} style={[styles.valueColumn, { width: COLUMN_WIDTH }]}>
-            <Text style={styles.valueText}>{formatValue(item[field])}</Text>
+            <Text style={styles.valueText}>{formatValue((item as any)[field])}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderAttributeRow = (row: any) => (
+    <View key={row.key} style={[styles.row, !isScrollable && styles.rowVertical]}>
+      {isScrollable ? (
+        <View style={styles.labelColumn}>
+          <Text style={styles.labelText}>{row.label}</Text>
+        </View>
+      ) : (
+        <View style={styles.fullWidthLabel}>
+          <Text style={styles.fullWidthLabelText}>{row.label}</Text>
+        </View>
+      )}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={styles.valuesScroll}
+        scrollEnabled={isScrollable}
+        contentContainerStyle={!isScrollable && { flexGrow: 1 }}
+      >
+        {row.values.map((val: any) => (
+          <View key={val.place_id} style={[styles.valueColumn, { width: COLUMN_WIDTH }]}>
+            <Text style={styles.valueText}>{val.label || val.value || '--'}</Text>
           </View>
         ))}
       </ScrollView>
@@ -102,7 +128,7 @@ export default function ComparisonScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3b2c85" />
-        <Text style={styles.loadingText}>Comparing places...</Text>
+        <Text style={styles.loadingText}>Loading detailed comparison...</Text>
       </SafeAreaView>
     );
   }
@@ -112,25 +138,13 @@ export default function ComparisonScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.loadingContainer}>
         <Icon name="alert-circle-outline" size={64} color="#ef4444" />
         <Text style={[styles.loadingText, { color: '#ef4444', marginTop: 16 }]}>
-          {data?.message || 'Failed to compare places'}
+          {data?.message || 'Failed to load detailed comparison'}
         </Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.retryButton, { marginTop: 12, backgroundColor: '#f3f4f6' }]} onPress={() => navigation.goBack()}>
           <Text style={[styles.retryText, { color: '#4b5563' }]}>Go Back</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  if (comparisonData.length === 0) {
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <Icon name="search-outline" size={64} color="#d1d5db" />
-        <Text style={styles.loadingText}>No comparison data available</Text>
-        <TouchableOpacity style={[styles.retryButton, { marginTop: 20 }]} onPress={() => navigation.goBack()}>
-          <Text style={styles.retryText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -143,7 +157,7 @@ export default function ComparisonScreen({ navigation, route }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Place Comparison</Text>
+        <Text style={styles.headerTitle}>Detailed Comparison</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -160,9 +174,9 @@ export default function ComparisonScreen({ navigation, route }: Props) {
           >
             {comparisonData.map((item: any) => (
               <View key={item.place_id} style={[styles.placeHeaderColumn, { width: COLUMN_WIDTH }]}>
-                {item.photo_name ? (
+                {item.photo_name || (item.photo_references && item.photo_references.length > 0) ? (
                   <Image 
-                    source={{ uri: getPhotoUrl(item.photo_name) }} 
+                    source={{ uri: getPhotoUrl(item.photo_name || item.photo_references[0].name) }} 
                     style={styles.placeImage} 
                   />
                 ) : (
@@ -195,12 +209,19 @@ export default function ComparisonScreen({ navigation, route }: Props) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Info</Text>
+          {renderComparisonRow('Distance', 'distance_from_you_km', 'navigate-outline')}
           {renderComparisonRow('Status', 'business_status', 'information-circle-outline')}
           {renderComparisonRow('Open Now', 'open_now', 'time-outline')}
           {renderComparisonRow('Price Level', 'price_level', 'cash-outline')}
           {renderComparisonRow('Type', 'primary_type', 'pricetag-outline')}
-          {renderComparisonRow('Neighborhood', 'neighborhood', 'map-outline')}
         </View>
+
+        {attributeTable.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Attributes</Text>
+            {attributeTable.map(renderAttributeRow)}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Amenities & Services</Text>
@@ -210,7 +231,7 @@ export default function ComparisonScreen({ navigation, route }: Props) {
           {renderComparisonRow('Outdoor Seating', 'outdoor_seating', 'sunny-outline')}
           {renderComparisonRow('Reservable', 'reservable', 'calendar-outline')}
           {renderComparisonRow('Wheelchair Acc.', 'wheelchair_accessible', 'body-outline')}
-          {renderComparisonRow('EV Charging', 'ev_charging', 'battery-charging-outline')}
+          {renderComparisonRow('Dogs Allowed', 'allows_dogs', 'paw-outline')}
         </View>
 
         <View style={styles.section}>
@@ -220,35 +241,91 @@ export default function ComparisonScreen({ navigation, route }: Props) {
           {renderComparisonRow('Dinner', 'serves_dinner', 'moon-outline')}
           {renderComparisonRow('Brunch', 'serves_brunch', 'cafe-outline')}
           {renderComparisonRow('Vegetarian', 'serves_vegetarian_food', 'leaf-outline')}
-          {renderComparisonRow('Beer', 'serves_beer', 'beer-outline')}
-          {renderComparisonRow('Wine', 'serves_wine', 'wine-outline')}
-          {renderComparisonRow('Cocktails', 'serves_cocktails', 'wine-outline')}
         </View>
 
+        {/* User Context Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment & Parking</Text>
-          {renderComparisonRow('Cash Only', 'payment_cash', 'wallet-outline')}
-          {renderComparisonRow('Credit Cards', 'payment_credit_cards', 'card-outline')}
-          {renderComparisonRow('Contactless', 'payment_contactless', 'wifi-outline')}
-          {renderComparisonRow('Free Parking', 'parking_free', 'car-outline')}
-          {renderComparisonRow('Paid Parking', 'parking_paid', 'car-outline')}
-          {renderComparisonRow('Valet Parking', 'parking_valet', 'car-sport-outline')}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Atmosphere</Text>
-          {renderComparisonRow('Good for Kids', 'good_for_children', 'happy-outline')}
-          {renderComparisonRow('Good for Groups', 'good_for_groups', 'people-outline')}
-          {renderComparisonRow('Live Music', 'live_music', 'musical-notes-outline')}
-          {renderComparisonRow('Restroom', 'restroom', 'water-outline')}
-        </View>
-
-        {comparisonData.some((item: any) => item.wikipedia_extract) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            {renderComparisonRow('Wikipedia', 'wikipedia_extract', 'book-outline')}
+          <Text style={styles.sectionTitle}>Your Context</Text>
+          <View style={[styles.row, !isScrollable && styles.rowVertical]}>
+            {isScrollable ? (
+              <View style={styles.labelColumn}>
+                <Icon name="bookmark-outline" size={16} color="#6b7280" />
+                <Text style={styles.labelText}>Saved</Text>
+              </View>
+            ) : (
+              <View style={styles.fullWidthLabel}>
+                <Icon name="bookmark-outline" size={14} color="#3b2c85" />
+                <Text style={styles.fullWidthLabelText}>Saved</Text>
+              </View>
+            )}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.valuesScroll}
+              scrollEnabled={isScrollable}
+              contentContainerStyle={!isScrollable && { flexGrow: 1 }}
+            >
+              {comparisonData.map((item) => (
+                <View key={item.place_id} style={[styles.valueColumn, { width: COLUMN_WIDTH }]}>
+                  <Text style={styles.valueText}>{item.your_context?.is_saved ? 'Yes' : 'No'}</Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-        )}
+          <View style={[styles.row, !isScrollable && styles.rowVertical]}>
+            {isScrollable ? (
+              <View style={styles.labelColumn}>
+                <Icon name="footsteps-outline" size={16} color="#6b7280" />
+                <Text style={styles.labelText}>Visited</Text>
+              </View>
+            ) : (
+              <View style={styles.fullWidthLabel}>
+                <Icon name="footsteps-outline" size={14} color="#3b2c85" />
+                <Text style={styles.fullWidthLabelText}>Visited</Text>
+              </View>
+            )}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.valuesScroll}
+              scrollEnabled={isScrollable}
+              contentContainerStyle={!isScrollable && { flexGrow: 1 }}
+            >
+              {comparisonData.map((item) => (
+                <View key={item.place_id} style={[styles.valueColumn, { width: COLUMN_WIDTH }]}>
+                  <Text style={styles.valueText}>{item.your_context?.has_visited ? 'Yes' : 'No'}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Reviews Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Top Reviews</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.valuesScroll}
+            scrollEnabled={isScrollable}
+            contentContainerStyle={!isScrollable && { flexGrow: 1 }}
+          >
+             {comparisonData.map((item) => (
+               <View key={item.place_id} style={[styles.valueColumn, { width: COLUMN_WIDTH }]}>
+                 {item.top_reviews && item.top_reviews.length > 0 ? (
+                   <View>
+                     <Text style={styles.reviewAuthor}>{item.top_reviews[0].author_name}</Text>
+                     <Text style={styles.reviewText} numberOfLines={4}>
+                       "{item.top_reviews[0].text}"
+                     </Text>
+                   </View>
+                 ) : (
+                   <Text style={styles.reviewText}>No reviews available</Text>
+                 )}
+               </View>
+             ))}
+          </ScrollView>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -400,6 +477,20 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  reviewText: {
+    fontSize: 12,
+    color: '#4b5563',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  reviewAuthor: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 4,
   },
   highlightRow: {
     paddingHorizontal: 16,
