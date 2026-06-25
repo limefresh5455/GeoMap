@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { routeService } from '../services/routeService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -45,10 +45,6 @@ export default function CommuteScreen({ navigation, route }: Props) {
 
   const { mutate: computeRoute, isPending: isLoading } = useMutation({
     mutationFn: async () => {
-      // Set departure time to 5 minutes in the future to satisfy "future time" requirement
-      const futureDate = new Date();
-      futureDate.setMinutes(futureDate.getMinutes() + 5);
-      
       const requestBody = {
         place_id: placeId || "",
         destination_latitude: destinationLat || 0,
@@ -61,20 +57,23 @@ export default function CommuteScreen({ navigation, route }: Props) {
         avoid_ferries: false
       };
       
-      console.log('Compute Route Request:', JSON.stringify(requestBody, null, 2));
-      const response = await api.post('/routes/compute', requestBody);
-      return response?.data;
+      return await routeService.computeRoute(requestBody);
     },
     onSuccess: (raw) => {
-      console.log('Compute Route Response:', JSON.stringify(raw, null, 2));
-      const data = raw?.data || raw;
+      const data = raw?.data;
       if (data) {
-        setRouteData(data);
+        setRouteData({
+          polyline: data.encoded_polyline,
+          distance_meters: data.distance_meters,
+          duration_seconds: data.duration_seconds,
+          start_location: { latitude: raw.origin_latitude!, longitude: raw.origin_longitude! },
+          end_location: { latitude: destinationLat!, longitude: destinationLng! }
+        });
         // Adjust map to show the whole route
-        const start = data.start_location;
-        const end = data.end_location;
+        const start = { latitude: raw.origin_latitude!, longitude: raw.origin_longitude! };
+        const end = { latitude: destinationLat!, longitude: destinationLng! };
         
-        if (start && end) {
+        if (start.latitude && end.latitude) {
           const midLat = (start.latitude + end.latitude) / 2;
           const midLng = (start.longitude + end.longitude) / 2;
           const latDelta = Math.abs(start.latitude - end.latitude) * 3;

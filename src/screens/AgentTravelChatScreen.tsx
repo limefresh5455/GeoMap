@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { chatService } from '../services/chatService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
@@ -87,21 +87,18 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
 
   const { mutate: sendMessage, isPending: isSending } = useMutation({
     mutationFn: async (content: string) => {
-      // Using the exact endpoint /api/v1/chat/message as requested
-      // Note: api instance baseURL already includes /api/v1
-      const response = await api.post('/chat/message', {
+      return await chatService.sendMessage({
         query: content,
-        session_id: sessionId
+        session_id: sessionId || undefined
       });
-      return response?.data;
     },
     onSuccess: (data) => {
-      const newSessionId = data?.session_id || data?.data?.session_id;
+      const newSessionId = data?.session_id;
       if (newSessionId && !sessionId) {
         setSessionId(newSessionId);
       }
       
-      const assistantText = data?.response || data?.message || data?.content || data?.answer || "";
+      const assistantText = data?.answer || "";
       if (assistantText) {
         simulateStreaming(assistantText);
       } else {

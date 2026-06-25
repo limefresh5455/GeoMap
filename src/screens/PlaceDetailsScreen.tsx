@@ -1,4 +1,4 @@
-import React, {useState, useRef, useCallback} from 'react';
+import React, {useState, useRef, useCallback, useEffect} from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,13 +14,16 @@ import {
   NativeScrollEvent,
   ViewToken,
   Alert,
+  Modal,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RouteProp} from '@react-navigation/native';
 import {AuthStackParamList} from '../navigation/AuthNavigator';
 import Icon from 'react-native-vector-icons/Ionicons';
-import {useMutation, useQuery} from '@tanstack/react-query';
-import {api} from '../services/api';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {placeService} from '../services/placeService';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Config from 'react-native-config';
 
@@ -35,6 +38,7 @@ type Props = {
 
 
 export default function PlaceDetailsScreen({navigation, route}: Props) {
+  const queryClient = useQueryClient();
   const {
     placeId,
     placeName = 'Place',
@@ -50,69 +54,111 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
   } = route.params || {};
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isVisitModalVisible, setIsVisitModalVisible] = useState(false);
+  const [visitRating, setVisitRating] = useState(5);
+  const [visitReview, setVisitReview] = useState('');
+  const [visitMood, setVisitMood] = useState('');
 
   const {data, isLoading} = useQuery({
     queryKey: ['GetPlaceDetailsById', placeId],
     queryFn: async () => {
       try {
-        const response = await api.get(`/places/${placeId}/details`);
-        return response?.data?.data;
+        const response = await placeService.getDetails(placeId!);
+        return response?.data;
       } catch (error: any) {
-          const errorMessage =
+        const errorMessage =
           error?.response?.data?.detail ||
-          error?.response?.data?.message || ""
-      Alert.alert('Error Getting Place Details', errorMessage);
-     
-        console.log(
-          error?.response,
-          'Get Place Details Error ===================',
-        );
+          error?.response?.data?.message || "";
+        Alert.alert('Error Getting Place Details', errorMessage);
         throw error;
       }
     },
     staleTime: 60 * 10 * 1000,
+    enabled: !!placeId,
   });
 
-    const getPhotoUrl:any = (photoName: string | null): string | null => {
-      if (!photoName) return null;
-      return `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=400&key=${Config.GOOGLE_MAPS_API_KEY}`;
-    };
-  
+  const {data: savedPlaces} = useQuery({
+    queryKey: ['savedPlaces'],
+    queryFn: () => placeService.listSaved(),
+  });
+
+  const savedPlace = savedPlaces?.data?.find((p: any) => p.place_id === placeId);
+  const isSaved = !!savedPlace;
+
+  const saveMutation = useMutation({
+    mutationFn: () => placeService.savePlace(placeId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['savedPlaces']});
+      Alert.alert('Success', 'Place saved successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to save place');
+    },
+  });
+
+  const unsaveMutation = useMutation({
+    mutationFn: () => placeService.unsavePlace(savedPlace!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['savedPlaces']});
+      Alert.alert('Success', 'Place removed from saved');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to unsave place');
+    },
+  });
+
+  const logVisitMutation = useMutation({
+    mutationFn: () => placeService.logVisit(placeId!, {
+      rating_given: visitRating,
+      review_text: visitReview,
+      mood: visitMood,
+    }),
+    onSuccess: () => {
+      setIsVisitModalVisible(false);
+      queryClient.invalidateQueries({queryKey: ['visits']});
+      Alert.alert('Success', 'Visit logged successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to log visit');
+    },
+  });
+
+  const getPhotoUrl: any = (photoName: string | null): string | null => {
+    if (!photoName) return null;
+    if (photoName.startsWith('http')) return photoName;
+    return `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=400&key=${Config.GOOGLE_MAPS_API_KEY}`;
+  };
 
   // Build photos array from API data, falling back to the passed photoUrl
-  const photos: string[] = data?.photos?.length
+  const photos: any[] = data?.photos?.length
     ? data.photos
     : photoUrl
-    ? [photoUrl]
+    ? [{ name: photoUrl }]
     : [];
 
   // Create new chat session and navigate to ChatDetail
   const {mutate: startChat, isPending: isStartingChat} = useMutation({
     mutationFn: async () => {
-      const response = await api.post(`/places/${placeId}/question`, {
+      return await placeService.askQuestion(placeId!, {
         question: `Tell me about ${placeName || data?.display_name}`,
       });
-      return response?.data;
     },
     onSuccess: (responseData: any) => {
-      const sessionId =
-        responseData?.session_id ||
-        responseData?.data?.session_id ||
-        responseData?.id;
+      const sessionId = responseData?.session_id;
       if (sessionId) {
         navigation.navigate('ChatDetail', {
           sessionId,
-          placeName: placeName || data?.display_name,
-          placeAddress: formatted_address || data?.formatted_address,
+          placeName: (placeName || data?.display_name) ?? undefined,
+          placeAddress: (formatted_address || data?.formatted_address) ?? undefined,
+          placeId: placeId ?? undefined,
         });
       }
     },
     onError: (error: any) => {
       const errorMessage =
-          error?.response?.data?.detail ||
-          error?.response?.data?.message || ""
+        error?.response?.data?.detail ||
+        error?.response?.data?.message || "";
       Alert.alert('Error Sending Message', errorMessage);
-     
     },
   });
 
@@ -153,7 +199,7 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
       <Image
         source={{uri: getPhotoUrl(item?.name)}}
         style={styles.carouselImage}
-        resizeMode="contain"
+        resizeMode="cover"
       />
   );
 
@@ -175,11 +221,22 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
         <View style={styles.headerRight}>
           <TouchableOpacity
             onPress={() => {
+              if (isSaved) {
+                unsaveMutation.mutate();
+              } else {
+                saveMutation.mutate();
+              }
+            }}
+            style={[styles.iconButton, {marginRight: 12}]}>
+            <Icon name={isSaved ? "bookmark" : "bookmark-outline"} size={20} color={isSaved ? "#3b2c85" : "#111827"} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
               navigation.navigate('Commute', {
                 placeId,
-                destinationName: placeName || data?.display_name,
-                destinationLat: latitude || data?.latitude,
-                destinationLng: longitude || data?.longitude,
+                destinationName: (placeName || data?.display_name) ?? undefined,
+                destinationLat: (latitude || data?.latitude) ?? undefined,
+                destinationLng: (longitude || data?.longitude) ?? undefined,
               });
             }}
             style={styles.iconButton}>
@@ -245,15 +302,25 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
 
       {/* ===== ZONE 3: Bottom Info + Ask Button ===== */}
       <View style={styles.bottomSection}>
-        {/* Place Info */}
-        <View style={styles.infoSection}>
-          <Text style={styles.placeTitle} numberOfLines={2}>
-            {placeName || data?.display_name}
-          </Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Place Info */}
+          <View style={styles.infoSection}>
+          <View style={styles.titleRow}>
+            <Text style={styles.placeTitle} numberOfLines={2}>
+              {placeName || data?.display_name}
+            </Text>
+            <TouchableOpacity 
+              style={styles.logVisitButton}
+              onPress={() => setIsVisitModalVisible(true)}
+            >
+              <Icon name="checkmark-circle-outline" size={20} color="#3b2c85" />
+              <Text style={styles.logVisitText}>Log Visit</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.ratingRow}>
             <Text style={styles.ratingText}>{rating || data?.rating}</Text>
-            {renderStars(rating || data?.rating)}
+            {renderStars((rating || data?.rating) ?? 0)}
             <Text style={styles.reviewCount}>
               ({user_rating_count || data?.user_rating_count} review
               {user_rating_count !== 1 ? 's' : ''})
@@ -293,8 +360,76 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
                 {open_now || data?.open_now ? 'Open Now' : 'Closed'}
               </Text>
             </View>
+            {data?.price_level && (
+              <View style={[styles.statusBadge, { marginLeft: 8, backgroundColor: '#f3f4f6' }]}>
+                <Text style={[styles.statusBadgeText, { color: '#374151' }]}>
+                  {data.price_level.replace('PRICE_LEVEL_', '').replace('INEXPENSIVE', '$').replace('MODERATE', '$$').replace('EXPENSIVE', '$$$').replace('VERY_EXPENSIVE', '$$$$')}
+                </Text>
+              </View>
+            )}
           </View>
+
+          {/* Contact & Website */}
+          <View style={styles.contactSection}>
+            {data?.international_phone_number && (
+              <TouchableOpacity 
+                style={styles.contactItem}
+                onPress={() => Linking.openURL(`tel:${data.international_phone_number}`)}
+              >
+                <Icon name="call-outline" size={18} color="#3b2c85" />
+                <Text style={styles.contactText}>{data.international_phone_number}</Text>
+              </TouchableOpacity>
+            )}
+            {data?.website_uri && (
+              <TouchableOpacity 
+                style={styles.contactItem}
+                onPress={() => Linking.openURL(data.website_uri!)}
+              >
+                <Icon name="globe-outline" size={18} color="#3b2c85" />
+                <Text style={styles.contactText} numberOfLines={1}>{data.website_uri}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Editorial Summary */}
+          {data?.editorial_summary && (
+            <View style={styles.summarySection}>
+              <Text style={styles.sectionTitle}>About</Text>
+              <Text style={styles.summaryText}>{data.editorial_summary}</Text>
+            </View>
+          )}
+
+          {/* Opening Hours */}
+          {data?.opening_hours?.weekday_descriptions && (
+            <View style={styles.hoursSection}>
+              <Text style={styles.sectionTitle}>Opening Hours</Text>
+              {data.opening_hours.weekday_descriptions.map((day, index) => (
+                <Text key={index} style={styles.hoursText}>{day}</Text>
+              ))}
+            </View>
+          )}
+
+          {/* Reviews */}
+          {data?.reviews && data.reviews.length > 0 && (
+            <View style={styles.reviewsSection}>
+              <Text style={styles.sectionTitle}>Recent Reviews</Text>
+              {data.reviews.slice(0, 3).map((review, index) => (
+                <View key={index} style={styles.reviewItem}>
+                  <View style={styles.reviewHeader}>
+                    <Text style={styles.reviewAuthor}>{review.author_name}</Text>
+                    <View style={styles.reviewRating}>
+                      <Text style={styles.reviewRatingText}>{review.rating}</Text>
+                      <Icon name="star" size={12} color="#f59e0b" />
+                    </View>
+                  </View>
+                  <Text style={styles.reviewDate}>{review.relative_publish_time_description}</Text>
+                  <Text style={styles.reviewText} numberOfLines={3}>{review.text}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
+      </ScrollView>
 
         {/* Ask About This Place Button */}
         <TouchableOpacity
@@ -312,6 +447,70 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Visit Modal */}
+      <Modal
+        visible={isVisitModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsVisitModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Log Your Visit</Text>
+            
+            <Text style={styles.label}>Rating</Text>
+            <View style={styles.modalStars}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setVisitRating(star)}>
+                  <Icon 
+                    name={star <= visitRating ? "star" : "star-outline"} 
+                    size={32} 
+                    color="#f59e0b" 
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Review (Optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="How was your visit?"
+              value={visitReview}
+              onChangeText={setVisitReview}
+              multiline
+            />
+
+            <Text style={styles.label}>Mood (Optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. Fun, Romantic, Quiet"
+              value={visitMood}
+              onChangeText={setVisitMood}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setIsVisitModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={() => logVisitMutation.mutate()}
+                disabled={logVisitMutation.isPending}
+              >
+                {logVisitMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -352,16 +551,16 @@ const styles = StyleSheet.create({
 
   // ===== Zone 2: Carousel =====
   carouselContainer: {
-    flex: 1,
+    height: CAROUSEL_HEIGHT,
     backgroundColor: '#f3f4f6',
     position: 'relative',
   },
   carouselList: {
-    flex: 0.5,
+    height: CAROUSEL_HEIGHT,
   },
   carouselImage: {
     width: SCREEN_WIDTH,
-    height: '100%',
+    height: CAROUSEL_HEIGHT,
   },
   dotContainer: {
     flexDirection: 'row',
@@ -404,6 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   placeholderImage: {
+    height: CAROUSEL_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
@@ -415,6 +615,7 @@ const styles = StyleSheet.create({
 
   // ===== Zone 3: Bottom Section =====
   bottomSection: {
+    flex: 1,
     backgroundColor: '#ffffff',
     paddingHorizontal: 24,
     paddingTop: 20,
@@ -431,11 +632,32 @@ const styles = StyleSheet.create({
   infoSection: {
     marginBottom: 20,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
   placeTitle: {
     fontSize: 22,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 10,
+  },
+  logVisitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  logVisitText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3b2c85',
   },
   ratingRow: {
     flexDirection: 'row',
@@ -501,6 +723,83 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  contactSection: {
+    marginTop: 16,
+    gap: 12,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  contactText: {
+    fontSize: 14,
+    color: '#3b2c85',
+    textDecorationLine: 'underline',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  summarySection: {
+    marginBottom: 16,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  hoursSection: {
+    marginBottom: 16,
+  },
+  hoursText: {
+    fontSize: 13,
+    color: '#4b5563',
+    marginBottom: 4,
+  },
+  reviewsSection: {
+    marginBottom: 16,
+  },
+  reviewItem: {
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  reviewRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  reviewRatingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  reviewDate: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginBottom: 6,
+  },
+  reviewText: {
+    fontSize: 13,
+    color: '#4b5563',
+    lineHeight: 18,
+  },
   statusTextOpen: {
     color: '#10b981',
   },
@@ -527,5 +826,76 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  modalStars: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  textInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: '#111827',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  submitButton: {
+    flex: 1,
+    backgroundColor: '#3b2c85',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

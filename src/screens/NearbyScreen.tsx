@@ -12,13 +12,18 @@ import {
   ActivityIndicator,
   Dimensions,
   StatusBar,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import MapView, { PROVIDER_GOOGLE, Marker, Circle } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { locationService } from '../services/locationService';
+import { weatherService } from '../services/weatherService';
+import { discoveryService } from '../services/discoveryService';
+import { AutocompletePrediction } from '../services/types';
 import Config from 'react-native-config';
 import {
   PLACE_TYPE_CATEGORIES,
@@ -123,21 +128,76 @@ const getWeatherIcon = (code: number, isDay: boolean = true) => {
 
 export default function NearbyScreen({ navigation }: Props) {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [weatherModalVisible, setWeatherModalVisible] = useState(false);
   const [activeFilters, setActiveFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [tempFilters, setTempFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [autocompleteResults, setAutocompleteResults] = useState<AutocompletePrediction[]>([]);
   const mapRef = useRef<MapView>(null);
+
+  // ... existing queries ...
+
+  const { data: autocompleteData, isFetching: autocompleteLoading } = useQuery({
+    queryKey: ['autocomplete', searchQuery],
+    queryFn: () => discoveryService.autocomplete(searchQuery, userLocation?.latitude, userLocation?.longitude),
+    enabled: searchQuery.length > 2 && isSearchVisible,
+  });
+
+  useEffect(() => {
+    if (autocompleteData?.predictions) {
+      setAutocompleteResults(autocompleteData.predictions);
+    } else {
+      setAutocompleteResults([]);
+    }
+  }, [autocompleteData]);
+
+  const handleAutocompleteSelect = (prediction: AutocompletePrediction) => {
+    setSearchQuery(prediction.main_text);
+    setAutocompleteResults([]);
+    // Trigger search with the selected place
+    refetchPlaces();
+  };
+
+  const togglePlaceSelection = (placeId: string) => {
+    setSelectedPlaceIds(prev => {
+      if (prev.includes(placeId)) {
+        return prev.filter(id => id !== placeId);
+      }
+      if (prev.length >= 10) {
+        Alert.alert('Limit Reached', 'You can compare up to 10 places at once.');
+        return prev;
+      }
+      return [...prev, placeId];
+    });
+  };
+
+  const handleCompare = () => {
+    if (selectedPlaceIds.length < 2) {
+      Alert.alert('Select Places', 'Please select at least 2 places to compare.');
+      return;
+    }
+    navigation.navigate('Comparison', { placeIds: selectedPlaceIds, useBatch: false });
+    setIsCompareMode(false);
+    setSelectedPlaceIds([]);
+  };
 
   // Fetch user's saved location
   const { data: userLocation, isLoading: locationLoading } = useQuery({
     queryKey: ['GetSavedLocation'],
     queryFn: async () => {
       try {
-        const response = await api.get('/locations/me');
-        const resData: LocationType = response?.data?.data;
-        const { latitude, longitude } = resData;
-        return { latitude: latitude ?? 0, longitude: longitude ?? 0 };
+        const response = await locationService.getMe();
+        const resData = response?.data;
+        if (resData && resData.latitude !== undefined && resData.latitude !== null && resData.longitude !== undefined && resData.longitude !== null) {
+          const lat = typeof resData.latitude === 'string' ? parseFloat(resData.latitude) : resData.latitude;
+          const lng = typeof resData.longitude === 'string' ? parseFloat(resData.longitude) : resData.longitude;
+          return { latitude: lat, longitude: lng };
+        }
+        return null;
       } catch (error) {
         console.log('No saved location found.');
         return null;
@@ -151,16 +211,10 @@ export default function NearbyScreen({ navigation }: Props) {
     queryKey: ['weather', userLocation?.latitude, userLocation?.longitude],
     queryFn: async () => {
       try {
-        const response = await api.get('/weather/current', {
-          params: {
-            lat: userLocation?.latitude,
-            lon: userLocation?.longitude,
-          },
-        });
-        console.log('WEATHER API SUCCESS:', JSON.stringify(response?.data));
-        return response?.data?.data || response?.data;
+        const response = await weatherService.getForecast();
+        return response?.data;
       } catch (error: any) {
-        console.log('Error fetching weather data:', error?.response?.data || error.message || error);
+        console.log('Error fetching weather data:', error.message);
         return null;
       }
     },
@@ -175,9 +229,19 @@ export default function NearbyScreen({ navigation }: Props) {
     refetch: refetchPlaces,
     isFetching,
   } = useQuery({
-    queryKey: ['NearbyPlaces', activeFilters],
+    queryKey: ['NearbyPlaces', activeFilters, showSavedOnly],
     queryFn: async () => {
       try {
+        if (showSavedOnly) {
+          const response = await placeService.getSavedNearby();
+          return (response?.data || []) as NearbyPlace[];
+        }
+
+        if (searchQuery.length > 2) {
+          const response = await discoveryService.textSearch({ text_query: searchQuery });
+          return (response?.data || []) as NearbyPlace[];
+        }
+
         const payload: any = {
           radius: activeFilters.radius,
           max_result_count: activeFilters.max_result_count,
@@ -193,17 +257,24 @@ export default function NearbyScreen({ navigation }: Props) {
           payload.excluded_types = activeFilters.excluded_types;
         }
 
-        const response = await api.post('/discovery/nearby', payload);
+        const response = await discoveryService.nearbySearch(payload);
     
-        return (response?.data?.data || []) as NearbyPlace[];
+        return (response?.data || []) as NearbyPlace[];
       } catch (error: any) {
-        console.log('Nearby search error:', error?.response?.data || error.message);
+        console.log('Search error:', error.message);
         return [];
       }
     },
     enabled: !!userLocation,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Effect to trigger search when searchQuery is cleared
+  useEffect(() => {
+    if (searchQuery === '' && !showSavedOnly) {
+      refetchPlaces();
+    }
+  }, [searchQuery, showSavedOnly]);
 
   // Animate map when places load
   useEffect(() => {
@@ -264,34 +335,51 @@ export default function NearbyScreen({ navigation }: Props) {
     const photoUrl = getPhotoUrl(item.first_photo_name);
     const typeLabel = getPlaceTypeLabel(item.primary_type);
     const typeIcon = getPlaceTypeIcon(item.primary_type);
+    const isSelected = selectedPlaceIds.includes(item.place_id);
 
     return (
       <TouchableOpacity
-        style={styles.placeCard}
+        style={[styles.placeCard, isSelected && styles.placeCardSelected]}
         activeOpacity={0.7}
-        onPress={() =>
-          navigation.navigate('PlaceDetails', {
-            placeId: item.place_id,
-            placeName: item.display_name,
-            formatted_address:item?.formatted_address,
-            latitude:item?.latitude,
-            longitude:item?.longitude,
-            google_maps_uri:item?.google_maps_uri,
-            open_now:item?.open_now,
-            photoUrl:photoUrl,
-            typeIcon:typeIcon,
-            rating:item?.rating as number,
-            user_rating_count:item?.user_rating_count as number
-            
-          })
-        }>
-        {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.placeImage} />
-        ) : (
-          <View style={[styles.placeImage, styles.placeImagePlaceholder]}>
-            <Icon name={typeIcon} size={24} color="#9ca3af" />
-          </View>
-        )}
+        onPress={() => {
+          if (isCompareMode) {
+            togglePlaceSelection(item.place_id);
+          } else {
+            navigation.navigate('PlaceDetails', {
+              placeId: item.place_id,
+              placeName: item.display_name,
+              formatted_address: item?.formatted_address,
+              latitude: item?.latitude,
+              longitude: item?.longitude,
+              google_maps_uri: item?.google_maps_uri,
+              open_now: item?.open_now,
+              photoUrl: photoUrl,
+              typeIcon: typeIcon,
+              rating: item?.rating as number,
+              user_rating_count: item?.user_rating_count as number
+            });
+          }
+        }}
+        onLongPress={() => {
+          if (!isCompareMode) {
+            setIsCompareMode(true);
+            togglePlaceSelection(item.place_id);
+          }
+        }}>
+        <View style={styles.cardLeft}>
+          {isCompareMode && (
+            <View style={[styles.selectionCircle, isSelected && styles.selectionCircleActive]}>
+              {isSelected && <Icon name="checkmark" size={14} color="#ffffff" />}
+            </View>
+          )}
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.placeImage} />
+          ) : (
+            <View style={[styles.placeImage, styles.placeImagePlaceholder]}>
+              <Icon name={typeIcon} size={24} color="#9ca3af" />
+            </View>
+          )}
+        </View>
         <View style={styles.placeInfo}>
           <Text style={styles.placeName} numberOfLines={1}>
             {item.display_name}
@@ -350,48 +438,130 @@ export default function NearbyScreen({ navigation }: Props) {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.getParent()?.goBack()}>
-          <Icon name="arrow-back" size={22} color="#111827" />
+          onPress={() => {
+            if (isCompareMode) {
+              setIsCompareMode(false);
+              setSelectedPlaceIds([]);
+            } else {
+              navigation.getParent()?.goBack();
+            }
+          }}>
+          <Icon name={isCompareMode ? "close" : "arrow-back"} size={22} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Nearby Places</Text>
+          <Text style={styles.headerTitle}>
+            {isCompareMode ? `${selectedPlaceIds.length} Selected` : 'Nearby Places'}
+          </Text>
           <Text style={styles.headerSubtitle}>
-            {nearbyPlaces?.length ?? 0} places within{' '}
-            {activeFilters.radius >= 1000
-              ? `${activeFilters.radius / 1000} km`
-              : `${activeFilters.radius}m`}
+            {isCompareMode ? 'Select 2-10 places' : `${nearbyPlaces?.length ?? 0} places nearby`}
           </Text>
         </View>
-        {weatherData && weatherData.temperature && (
+        
+        {!isCompareMode && (
           <TouchableOpacity
-            style={styles.weatherPill}
-            onPress={() => setWeatherModalVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Icon
-              name={getWeatherIcon(weatherData.weather?.condition_code, weatherData.weather?.is_day)}
-              size={18}
-              color="#3b2c85"
-            />
-            <Text style={styles.weatherPillText}>
-              {weatherData.temperature.current_c?.toFixed(1)}°C
-            </Text>
+            style={[styles.headerIconButton, showSavedOnly && styles.headerIconButtonActive]}
+            onPress={() => setShowSavedOnly(!showSavedOnly)}>
+            <Icon name={showSavedOnly ? "bookmark" : "bookmark-outline"} size={20} color={showSavedOnly ? "#ffffff" : "#3b2c85"} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={[
-            styles.filterButton,
-            hasActiveFilters && styles.filterButtonActive,
-          ]}
-          onPress={openFilterModal}>
-          <Icon
-            name="options-outline"
-            size={20}
-            color={hasActiveFilters ? '#ffffff' : '#3b2c85'}
-          />
-          {hasActiveFilters && <View style={styles.filterDot} />}
-        </TouchableOpacity>
+
+        {!isCompareMode && (
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => setIsSearchVisible(!isSearchVisible)}>
+            <Icon name="search-outline" size={20} color="#3b2c85" />
+          </TouchableOpacity>
+        )}
+
+        {!isCompareMode && (
+          weatherLoading ? (
+            <View style={[styles.weatherPill, { opacity: 0.6 }]}>
+              <ActivityIndicator size="small" color="#3b2c85" />
+            </View>
+          ) : weatherData && weatherData.temperature ? (
+            <TouchableOpacity
+              style={styles.weatherPill}
+              onPress={() => navigation.navigate('Weather')}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name={getWeatherIcon(weatherData.weather?.condition_code || 1000, weatherData.weather?.is_day ?? true)}
+                size={18}
+                color="#3b2c85"
+              />
+              <Text style={styles.weatherPillText}>
+                {weatherData.temperature.current_c?.toFixed(0)}°
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        )}
+
+        {isCompareMode ? (
+          <TouchableOpacity
+            style={[styles.compareButton, selectedPlaceIds.length < 2 && styles.compareButtonDisabled]}
+            onPress={handleCompare}
+            disabled={selectedPlaceIds.length < 2}
+          >
+            <Text style={styles.compareButtonText}>Compare</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              hasActiveFilters && styles.filterButtonActive,
+            ]}
+            onPress={openFilterModal}>
+            <Icon
+              name="options-outline"
+              size={20}
+              color={hasActiveFilters ? '#ffffff' : '#3b2c85'}
+            />
+            {hasActiveFilters && <View style={styles.filterDot} />}
+          </TouchableOpacity>
+        )}
       </View>
+
+      {isSearchVisible && (
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Icon name="search" size={18} color="#9ca3af" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for places..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+            {autocompleteLoading && <ActivityIndicator size="small" color="#3b2c85" style={{ marginRight: 8 }} />}
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => {
+                setSearchQuery('');
+                setAutocompleteResults([]);
+              }}>
+                <Icon name="close-circle" size={18} color="#9ca3af" />
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          {autocompleteResults.length > 0 && (
+            <View style={styles.autocompleteContainer}>
+              {autocompleteResults.map((item) => (
+                <TouchableOpacity
+                  key={item.place_id}
+                  style={styles.autocompleteItem}
+                  onPress={() => handleAutocompleteSelect(item)}
+                >
+                  <Icon name="location-outline" size={16} color="#6b7280" />
+                  <View style={styles.autocompleteTextContainer}>
+                    <Text style={styles.autocompleteMainText}>{item.main_text}</Text>
+                    <Text style={styles.autocompleteSecondaryText}>{item.secondary_text}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Map */}
       <View style={styles.mapContainer}>
@@ -762,187 +932,6 @@ export default function NearbyScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-
-      {/* Weather Details Modal */}
-      <Modal
-        visible={weatherModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setWeatherModalVisible(false)}
-      >
-        <View style={styles.weatherModalOverlay}>
-          <View style={styles.weatherModalContent}>
-            {/* Modal Header */}
-            <View style={styles.weatherModalHeader}>
-              <View>
-                <Text style={styles.weatherModalTitle}>
-                  {weatherData?.location?.city || 'Weather Details'}
-                </Text>
-                {weatherData?.location?.local_time && (
-                  <Text style={styles.weatherModalSubtitle}>
-                    As of {weatherData.location.local_time}
-                  </Text>
-                )}
-              </View>
-              <TouchableOpacity
-                onPress={() => setWeatherModalVisible(false)}
-                style={styles.weatherModalCloseButton}
-              >
-                <Icon name="close" size={24} color="#111827" />
-              </TouchableOpacity>
-            </View>
-
-            {weatherData ? (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.weatherModalScrollContent}
-              >
-                {/* Main Temperature Card */}
-                <View style={styles.weatherMainCard}>
-                  <View style={styles.weatherMainInfo}>
-                    <Icon
-                      name={getWeatherIcon(weatherData.weather?.condition_code, weatherData.weather?.is_day)}
-                      size={52}
-                      color="#3b2c85"
-                    />
-                    <View style={styles.weatherMainText}>
-                      <Text style={styles.weatherMainTemp}>
-                        {weatherData.temperature?.current_c?.toFixed(1)}°C
-                      </Text>
-                      <Text style={styles.weatherMainCondition}>
-                        {weatherData.weather?.condition || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherSubInfoRow}>
-                    <View style={styles.weatherSubInfoItem}>
-                      <Text style={styles.weatherSubInfoLabel}>Feels Like</Text>
-                      <Text style={styles.weatherSubInfoValue}>
-                        {weatherData.temperature?.feels_like_c?.toFixed(1)}°C
-                      </Text>
-                    </View>
-                    <View style={styles.weatherSubInfoItem}>
-                      <Text style={styles.weatherSubInfoLabel}>Cloud Cover</Text>
-                      <Text style={styles.weatherSubInfoValue}>
-                        {weatherData.atmosphere?.cloud_cover}%
-                      </Text>
-                    </View>
-                    <View style={styles.weatherSubInfoItem}>
-                      <Text style={styles.weatherSubInfoLabel}>UV Index</Text>
-                      <Text style={styles.weatherSubInfoValue}>
-                        {weatherData.atmosphere?.uv_index?.toFixed(1)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Smart Advisory Card */}
-                <View style={styles.weatherAdvisoryCard}>
-                  <Icon name="information-circle-outline" size={20} color="#4f46e5" />
-                  <Text style={styles.weatherAdvisoryText}>
-                    {weatherData.precipitation?.rain_probability > 30 || weatherData.precipitation?.will_rain
-                      ? 'Rain expected. It might be better to check out indoor places like cafes or museums, or carry an umbrella!'
-                      : weatherData.temperature?.current_c > 35
-                      ? 'It is quite hot outside. If you are visiting outdoor parks, stay hydrated!'
-                      : 'Perfect weather for outdoor sightseeing and exploring nearby spots!'}
-                  </Text>
-                </View>
-
-                {/* Detailed Sections */}
-                <Text style={styles.weatherSectionTitle}>Atmosphere</Text>
-                <View style={styles.weatherGrid}>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="water-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Humidity</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.atmosphere?.humidity}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="eye-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Visibility</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.atmosphere?.visibility_km} km
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="speedometer-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Pressure</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.atmosphere?.pressure_mb} mb
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="thermometer-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Dew Point</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.atmosphere?.dew_point_c?.toFixed(1)}°C
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <Text style={styles.weatherSectionTitle}>Wind</Text>
-                <View style={styles.weatherGrid}>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="navigate-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Speed & Dir</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.wind?.speed_kph} kph ({weatherData.wind?.direction})
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="flag-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Gust Speed</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.wind?.gust_kph} kph
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <Text style={styles.weatherSectionTitle}>Precipitation</Text>
-                <View style={styles.weatherGrid}>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="umbrella-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Rain Chance</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.precipitation?.rain_probability}%
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.weatherGridItem}>
-                    <Icon name="rainy-outline" size={20} color="#6b7280" />
-                    <View style={styles.weatherGridTextContainer}>
-                      <Text style={styles.weatherGridLabel}>Amount</Text>
-                      <Text style={styles.weatherGridValue}>
-                        {weatherData.precipitation?.amount_mm} mm
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </ScrollView>
-            ) : (
-              <View style={styles.weatherErrorContainer}>
-                <Text style={styles.weatherErrorText}>
-                  Unable to load weather data
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -1109,18 +1098,116 @@ const styles = StyleSheet.create({
   },
 
   // Place card
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  headerIconButtonActive: {
+    backgroundColor: '#3b2c85',
+  },
+  searchBarContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#ffffff',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 15,
+    color: '#111827',
+    padding: 0,
+  },
+  autocompleteContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    maxHeight: 200,
+    overflow: 'hidden',
+  },
+  autocompleteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  autocompleteTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  autocompleteMainText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  autocompleteSecondaryText: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
   placeCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+    paddingHorizontal: 4,
+  },
+  placeCardSelected: {
+    backgroundColor: '#f5f3ff',
+    borderRadius: 12,
+  },
+  cardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectionCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectionCircleActive: {
+    backgroundColor: '#3b2c85',
+    borderColor: '#3b2c85',
   },
   placeImage: {
     width: 56,
     height: 56,
     borderRadius: 14,
     backgroundColor: '#f3f4f6',
+  },
+  compareButton: {
+    backgroundColor: '#3b2c85',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  compareButtonDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  compareButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   placeImagePlaceholder: {
     justifyContent: 'center',
@@ -1471,163 +1558,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#3b2c85',
-  },
-  weatherModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  weatherModalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: '85%',
-    paddingBottom: 30,
-  },
-  weatherModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  weatherModalTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  weatherModalSubtitle: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
-  weatherModalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  weatherModalScrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  weatherMainCard: {
-    backgroundColor: '#f5f3ff',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#ddd6fe',
-  },
-  weatherMainInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 20,
-  },
-  weatherMainText: {
-    flex: 1,
-  },
-  weatherMainTemp: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#3b2c85',
-  },
-  weatherMainCondition: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  weatherSubInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd6fe',
-    paddingTop: 16,
-  },
-  weatherSubInfoItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  weatherSubInfoLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  weatherSubInfoValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3b2c85',
-  },
-  weatherAdvisoryCard: {
-    flexDirection: 'row',
-    backgroundColor: '#eff6ff',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-  },
-  weatherAdvisoryText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#1e3a8a',
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  weatherSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 12,
-    marginBottom: 12,
-  },
-  weatherGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 8,
-  },
-  weatherGridItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 12,
-    width: '48%',
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-    gap: 10,
-  },
-  weatherGridTextContainer: {
-    flex: 1,
-  },
-  weatherGridLabel: {
-    fontSize: 11,
-    color: '#9ca3af',
-  },
-  weatherGridValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-    marginTop: 2,
-  },
-  weatherErrorContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  weatherErrorText: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

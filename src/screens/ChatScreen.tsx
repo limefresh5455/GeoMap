@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { placeService } from '../services/placeService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 
 type QASession = {
-  session_id: number;
+  session_id: string;
   place: {
     place_id: string;
     name: string;
@@ -67,40 +68,89 @@ function getAvatarColor(id: number): string {
 
 const ChatScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
+  const queryClient = useQueryClient();
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
 
   const { data: sessions, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['AllChats'],
     queryFn: async () => {
-      const response = await api.get(
-        '/places/qa/sessions?page=1&page_size=20&sort=last_message',
-      );
-      return (response?.data?.sessions || []) as QASession[];
+      const response = await placeService.listSessions();
+      return (response?.sessions || []) as any[];
     },
     staleTime: 60 * 1000,
   });
 
+  const deleteSessionsMutation = useMutation({
+    mutationFn: (ids: string[]) => placeService.deleteSessions(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['AllChats'] });
+      setIsSelectMode(false);
+      setSelectedSessions([]);
+      Alert.alert('Success', 'Selected chats deleted');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to delete chats');
+    },
+  });
+
   const handleSessionPress = (session: QASession) => {
-    navigation.navigate('ChatDetail', {
-      sessionId: session.session_id,
-      placeName: session.place.name,
-      placeAddress: session.place.address,
-      placeId:session.place.place_id,
-    });
+    if (isSelectMode) {
+      toggleSelection(session.session_id);
+    } else {
+      navigation.navigate('ChatDetail', {
+        sessionId: session.session_id,
+        placeName: session.place.name,
+        placeAddress: session.place.address,
+        placeId: session.place.place_id,
+      });
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedSessions(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedSessions.length === 0) return;
+    Alert.alert(
+      'Delete Chats',
+      `Are you sure you want to delete ${selectedSessions.length} conversation(s)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: () => deleteSessionsMutation.mutate(selectedSessions) 
+        },
+      ]
+    );
   };
 
   const renderSessionItem = ({ item }: { item: QASession }) => {
     const initials = getPlaceInitials(item.place.name);
-    const avatarColor = getAvatarColor(item.session_id);
+    const avatarColor = getAvatarColor(item.session_id as any);
     const timeAgo = formatTimeAgo(item.last_message_at);
+    const isSelected = selectedSessions.includes(item.session_id);
 
     return (
       <TouchableOpacity
-        style={styles.sessionCard}
+        style={[styles.sessionCard, isSelected && styles.sessionCardSelected]}
         activeOpacity={0.6}
-        onPress={() => handleSessionPress(item)}>
-        {/* Avatar */}
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
+        onPress={() => handleSessionPress(item)}
+        onLongPress={() => {
+          setIsSelectMode(true);
+          toggleSelection(item.session_id);
+        }}>
+        {/* Avatar / Selection Circle */}
+        <View style={[styles.avatar, { backgroundColor: isSelectMode ? (isSelected ? '#3b2c85' : '#e5e7eb') : avatarColor }]}>
+          {isSelectMode ? (
+            <Icon name={isSelected ? "checkmark" : "ellipse-outline"} size={24} color="#ffffff" />
+          ) : (
+            <Text style={styles.avatarText}>{initials}</Text>
+          )}
         </View>
 
         {/* Content */}
@@ -109,22 +159,12 @@ const ChatScreen = () => {
             <Text style={styles.placeName} numberOfLines={1}>
               {item?.place?.name}
             </Text>
-            <Text style={styles.timeText}>{timeAgo}</Text>
+            {!isSelectMode && <Text style={styles.timeText}>{timeAgo}</Text>}
           </View>
-          {/* <Text style={styles.sessionTitle} numberOfLines={1}>
-            {item?.title}
-          </Text> */}
           <View style={styles.sessionBottomRow}>
             <Text style={styles.lastMessage} numberOfLines={1}>
               {item?.last_message}
             </Text>
-            {/* {item.message_count > 0 && (
-              <View style={styles.messageBadge}>
-                <Text style={styles.messageBadgeText}>
-                  {item.message_count}
-                </Text>
-              </View>
-            )} */}
           </View>
         </View>
       </TouchableOpacity>
@@ -138,19 +178,35 @@ const ChatScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Icon name="chatbubbles" size={24} color="#ffffff" />
-          <Text style={styles.headerTitle}>Geo Chat</Text>
+          {isSelectMode ? (
+            <TouchableOpacity onPress={() => { setIsSelectMode(false); setSelectedSessions([]); }}>
+              <Icon name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          ) : (
+            <Icon name="chatbubbles" size={24} color="#ffffff" />
+          )}
+          <Text style={styles.headerTitle}>
+            {isSelectMode ? `${selectedSessions.length} Selected` : 'Geo Chat'}
+          </Text>
         </View>
         <View style={styles.headerRightActions}>
-          <TouchableOpacity 
-            style={styles.agentButton}
-            onPress={() => navigation.navigate('AgentTravelChat')}>
-            <Icon name="airplane" size={20} color="#ffffff" />
-            <Text style={styles.agentButtonText}>AI Agent</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.searchButton}>
-            <Icon name="search-outline" size={22} color="#ffffff" />
-          </TouchableOpacity>
+          {isSelectMode ? (
+            <TouchableOpacity onPress={handleDeleteSelected} disabled={selectedSessions.length === 0}>
+              <Icon name="trash-outline" size={24} color={selectedSessions.length > 0 ? "#ffffff" : "rgba(255,255,255,0.5)"} />
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity 
+                style={styles.agentButton}
+                onPress={() => navigation.navigate('AgentTravelChat')}>
+                <Icon name="airplane" size={20} color="#ffffff" />
+                <Text style={styles.agentButtonText}>AI Agent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.searchButton}>
+                <Icon name="search-outline" size={22} color="#ffffff" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
@@ -270,6 +326,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     backgroundColor: '#ffffff',
+  },
+  sessionCardSelected: {
+    backgroundColor: '#f3f4f6',
   },
   avatar: {
     width: 52,

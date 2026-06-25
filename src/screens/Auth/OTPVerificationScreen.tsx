@@ -14,7 +14,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '../../navigation/AuthNavigator';
-import { api } from '../../services/api';
+import { authService } from '../../services/authService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useMutation } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -76,11 +76,9 @@ export default function OTPVerificationScreen({ navigation, route }: Props) {
   const verifyMutation = useMutation({
     mutationFn: async (otpCode: string) => {
       try {
-        // Try calling the verify endpoint
-        const response = await api.post('/auth/verify-otp', { email, otp: otpCode });
-        return response?.data;
+        const response = await authService.verifyOtp({ email, otp: otpCode });
+        return response;
       } catch (error: any) {
-        // Fallback or detailed error message
         const errorMessage =
           error?.response?.data?.detail ||
           error?.response?.data?.message ||
@@ -89,13 +87,16 @@ export default function OTPVerificationScreen({ navigation, route }: Props) {
         throw error;
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       // If we have a password, attempt automatic login for a premium UX
       if (password) {
         try {
-          const loginResponse = await api.post('/auth/login', { email, password });
-          if (loginResponse?.data?.access_token) {
-            await AsyncStorage.setItem('userToken', loginResponse.data.access_token);
+          const loginResponse = await authService.login({ email, password });
+          if (loginResponse?.access_token) {
+            await AsyncStorage.setItem('userToken', loginResponse.access_token);
+            if (loginResponse.refresh_token) {
+              await AsyncStorage.setItem('refreshToken', loginResponse.refresh_token);
+            }
             Alert.alert('Success', 'Verification successful! Welcome.', [
               { text: 'Get Started', onPress: () => navigation.replace('Home') },
             ]);
@@ -117,8 +118,8 @@ export default function OTPVerificationScreen({ navigation, route }: Props) {
   const resendMutation = useMutation({
     mutationFn: async () => {
       try {
-        const response = await api.post('/auth/resend-otp', { email });
-        return response?.data;
+        const response = await authService.resendOtp(email);
+        return response;
       } catch (error: any) {
         const errorMessage =
           error?.response?.data?.detail ||

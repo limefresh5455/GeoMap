@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/AuthNavigator';
-import { api } from '../../services/api';
+import { authService } from '../../services/authService';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,19 +42,21 @@ export default function LoginScreen({ navigation, route }: Props) {
       password: string;
     }) => {
       try {
-        const response = await api.post('/auth/login', { email, password });
+        const response = await authService.login({ email, password });
 
-          if(response?.data?.access_token){
-            await AsyncStorage.setItem('userToken', response?.data?.access_token);
-            return response?.data
-          }else{
-            throw new Error('Invalid response from server');
+        if (response?.access_token) {
+          await AsyncStorage.setItem('userToken', response.access_token);
+          if (response.refresh_token) {
+            await AsyncStorage.setItem('refreshToken', response.refresh_token);
           }
+          return response;
+        } else {
+          throw new Error('Invalid response from server');
+        }
       } catch (error: any) {
-        console.log(error?.response,"Error============>>>>>>>>")
         const errorMessage =
           error?.response?.data?.detail ||
-          error?.response?.data?.message ||""
+          error?.response?.data?.message ||
           'An error occurred during login. Please try again.';
         Alert.alert('Login Failed', errorMessage);
         throw error;

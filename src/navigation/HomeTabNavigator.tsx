@@ -6,18 +6,10 @@ import HomeScreen from '../screens/HomeScreen';
 import NearbyScreen from '../screens/NearbyScreen';
 import ChatScreen from '../screens/ChatScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import SavedPlacesScreen from '../screens/SavedPlacesScreen';
 
 const Tab = createBottomTabNavigator();
-
-// Placeholder screens for UI
-const PlaceholderScreen = ({ title }: { title: string }) => (
-  <View style={styles.placeholderContainer}>
-    <Text style={styles.placeholderText}>{title} Screen</Text>
-    <Text style={styles.placeholderSub}>Coming Soon</Text>
-  </View>
-);
-
-
+// ... existing PlaceholderScreen ...
 export default function HomeTabNavigator() {
   return (
     <Tab.Navigator
@@ -31,6 +23,8 @@ export default function HomeTabNavigator() {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Nearby') {
             iconName = focused ? 'compass' : 'compass-outline';
+          } else if (route.name === 'Saved') {
+            iconName = focused ? 'bookmark' : 'bookmark-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }
@@ -54,14 +48,19 @@ export default function HomeTabNavigator() {
       })}
     >
       <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={{ tabBarLabel: 'Chat' }}
-      />
-      <Tab.Screen
         name="Nearby"
         component={NearbyScreen}
         options={{ tabBarLabel: 'Nearby' }}
+      />
+      <Tab.Screen
+        name="Saved"
+        component={SavedPlacesScreen}
+        options={{ tabBarLabel: 'Saved' }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ tabBarLabel: 'Chat' }}
       />
       <Tab.Screen
         name="Profile"

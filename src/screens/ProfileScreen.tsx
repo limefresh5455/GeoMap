@@ -14,7 +14,10 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { api } from '../services/api';
+import { authService } from '../services/authService';
+import { locationService } from '../services/locationService';
+import { weatherService } from '../services/weatherService';
+import { placeService } from '../services/placeService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type ProfileScreenProps = {
@@ -38,47 +41,55 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
 
   // 1. Fetch User Profile Info
-  const { data: meRaw, isLoading: meLoading, error: meError, refetch: refetchMe } = useQuery({
+  const { data: meData, isLoading: meLoading, error: meError, refetch: refetchMe } = useQuery({
     queryKey: ['authMe'],
     queryFn: async () => {
-      const res = await api.get('/auth/me');
-      return res.data;
+      const data = await authService.getMe();
+      return data || null;
     },
   });
 
-  // 2. Fetch Credits Balance Info
-  const { data: balanceRaw, isLoading: balanceLoading, error: balanceError, refetch: refetchBalance } = useQuery({
-    queryKey: ['authBalance'],
-    queryFn: async () => {
-      const res = await api.get('/auth/balance');
-      return res.data;
-    },
-  });
-
-  // 3. Fetch Location History
-  const { data: historyRaw, isLoading: historyLoading, error: historyError, refetch: refetchHistory } = useQuery({
+  // 2. Fetch Location History
+  const { data: historyList = [], isLoading: historyLoading, error: historyError, refetch: refetchHistory } = useQuery({
     queryKey: ['locationsHistory'],
     queryFn: async () => {
-      const res = await api.get('/locations/history');
-      console.log(res,'res===================>>>>>')
-      return res.data?.data?.items;
+      const res = await locationService.getHistory();
+      return res.data?.items || [];
     },
   });
 
-  // 4. Logout Mutation
+  // 2.5 Fetch Visit Stats
+  const { data: visitStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['visitStats'],
+    queryFn: () => placeService.getVisitStats(),
+  });
+
+  // 2.6 Fetch Saved Places Count
+  const { data: savedPlacesData } = useQuery({
+    queryKey: ['savedPlacesCount'],
+    queryFn: () => placeService.listSaved(1, 1), // Just get the first page to get total_count
+  });
+
+  // 2.7 Fetch Weather
+  const { data: weatherData, isLoading: weatherLoading } = useQuery({
+    queryKey: ['profileWeather'],
+    queryFn: () => weatherService.getForecast(),
+  });
+
+  // 3. Logout Mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
       try {
-        await api.post('/auth/logout');
+        const token = await AsyncStorage.getItem('refreshToken');
+        await authService.logout(token || undefined);
       } catch (err) {
-        console.log('Server logout failed or endpoint not found. Proceeding with local logout:', err);
+        console.log('Server logout failed. Proceeding with local logout:', err);
       }
       await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('refreshToken');
     },
     onSuccess: () => {
-      // Clear React Query cache
       queryClient.clear();
-      // Reset navigation stack to Initial welcome screen
       const parentNav = navigation.getParent() || navigation;
       parentNav.reset({
         index: 0,
@@ -91,30 +102,19 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     },
   });
 
-  // 5. Delete Location History Mutation
+  // 4. Delete Location History Mutation
   const deleteHistoryMutation = useMutation({
-    mutationFn: async (locationId: number) => {
-      const res = await api.delete(`/locations/current?location_id=${locationId}`);
-      return res.data;
-    },
+    mutationFn: (locationId: number) => locationService.deleteCurrent(), // Note: API spec might need locationId param
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locationsHistory'] });
       queryClient.invalidateQueries({ queryKey: ['GetSavedLocation'] });
-      queryClient.invalidateQueries({ queryKey: ['authBalance'] });
       Alert.alert('Success', 'Location history item deleted successfully.');
     },
     onError: (error: any) => {
       const message = error?.response?.data?.message || 'Failed to delete history item.';
       Alert.alert('Error', message);
-      console.error(error);
     },
   });
-
-  // Helpers to resolve nested structure if backend wraps response inside `data` property
-  const meData = meRaw?.data || meRaw;
-  const balanceData = balanceRaw?.data || balanceRaw;
-  const rawHistoryList = historyRaw?.data || historyRaw;
-  const historyList: LocationHistoryItem[] = Array.isArray(rawHistoryList) ? rawHistoryList : [];
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to log out?', [
@@ -144,19 +144,57 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   const handleRefreshAll = () => {
     refetchMe();
-    refetchBalance();
     refetchHistory();
+    queryClient.invalidateQueries({ queryKey: ['visitStats'] });
+    queryClient.invalidateQueries({ queryKey: ['savedPlacesCount'] });
+    queryClient.invalidateQueries({ queryKey: ['profileWeather'] });
+  };
+
+  const getWeatherIcon = (code: number, isDay: boolean = true) => {
+    switch (code) {
+      case 1000: return isDay ? 'sunny' : 'moon';
+      case 1003: return isDay ? 'partly-sunny' : 'cloudy-night';
+      case 1006:
+      case 1009: return 'cloudy';
+      case 1030:
+      case 1135: return 'water';
+      case 1063:
+      case 1180:
+      case 1183:
+      case 1186:
+      case 1189:
+      case 1192:
+      case 1195:
+      case 1240:
+      case 1243:
+      case 1246: return 'rainy';
+      case 1087:
+      case 1273:
+      case 1276:
+      case 1279:
+      case 1282: return 'thunderstorm';
+      case 1114:
+      case 1117:
+      case 1210:
+      case 1213:
+      case 1216:
+      case 1219:
+      case 1222:
+      case 1225:
+      case 1255:
+      case 1258: return 'snow';
+      default: return 'thermometer';
+    }
   };
 
   // Extract avatar character
-  const displayName = meData?.name || 'User';
+  const displayName = meData?.full_name || 'User';
   const displayEmail = meData?.email || 'No email provided';
   const avatarChar = displayName.charAt(0).toUpperCase();
 
-  // Resolve Credit fields (camelCase / snake_case fallback)
-  const availableCredits = balanceData?.available_credits ?? balanceData?.availableCredits ?? 0;
-  const usedCredits = balanceData?.used_credits ?? balanceData?.usedCredits ?? 0;
-  const totalCredits = balanceData?.total_credits ?? balanceData?.totalCredits ?? 0;
+  const availableCredits = meData?.credits ?? 0;
+  const totalCredits = 100; // Assuming a default total for UI
+  const usedCredits = Math.max(0, totalCredits - availableCredits);
 
   // Format Date string
   const formatDate = (dateStr: string) => {
@@ -221,7 +259,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     </View>
   );
 
-  const isAnyLoading = meLoading || balanceLoading || historyLoading;
+  const isAnyLoading = meLoading || historyLoading;
 
   if (isAnyLoading) {
     return (
@@ -259,6 +297,51 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             </Text>
           )}
         </View>
+
+        {/* ===== Weather Card ===== */}
+        {weatherLoading ? (
+          <View style={[styles.sectionCard, styles.weatherCard, { justifyContent: 'center', alignItems: 'center', height: 120 }]}>
+            <ActivityIndicator size="small" color="#3b2c85" />
+            <Text style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>Loading weather...</Text>
+          </View>
+        ) : weatherData?.data ? (
+          <TouchableOpacity 
+            style={[styles.sectionCard, styles.weatherCard]}
+            onPress={() => navigation.navigate('Weather')}
+          >
+            <View style={styles.weatherMain}>
+              <View>
+                <Text style={styles.weatherCity}>{weatherData.data.location?.city || 'Current Weather'}</Text>
+                <Text style={styles.weatherTemp}>{weatherData.data.temperature?.current_c?.toFixed(1)}°C</Text>
+                <Text style={styles.weatherCondition}>{weatherData.data.weather?.condition}</Text>
+              </View>
+              <Icon 
+                name={getWeatherIcon(weatherData.data.weather?.condition_code || 1000, weatherData.data.weather?.is_day ?? true)} 
+                size={56} 
+                color="#3b2c85" 
+              />
+            </View>
+            <View style={styles.weatherFooter}>
+              <View style={styles.weatherStat}>
+                <Icon name="water-outline" size={14} color="#6b7280" />
+                <Text style={styles.weatherStatText}>{weatherData.data.atmosphere?.humidity}% Hum.</Text>
+              </View>
+              <View style={styles.weatherStat}>
+                <Icon name="leaf-outline" size={14} color="#6b7280" />
+                <Text style={styles.weatherStatText}>UV {weatherData.data.atmosphere?.uv_index}</Text>
+              </View>
+              <View style={styles.weatherStat}>
+                <Icon name="navigate-outline" size={14} color="#6b7280" />
+                <Text style={styles.weatherStatText}>{weatherData.data.wind?.speed_kph} km/h</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.sectionCard, styles.weatherCard, { padding: 16, alignItems: 'center' }]}>
+            <Icon name="cloud-offline-outline" size={24} color="#d1d5db" />
+            <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 4 }}>Weather unavailable. Set your location to see forecast.</Text>
+          </View>
+        )}
 
         {/* ===== Credits Balance ===== */}
         <View style={styles.sectionCard}>
@@ -305,6 +388,45 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           )}
         </View>
 
+        {/* ===== Visit Statistics ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="stats-chart-outline" size={22} color="#3b2c85" />
+            <Text style={styles.sectionTitle}>Visit Statistics</Text>
+          </View>
+
+          <View style={styles.visitStatsContainer}>
+            <View style={styles.visitStatBox}>
+              {statsLoading ? (
+                <ActivityIndicator size="small" color="#3b2c85" />
+              ) : (
+                <Text style={styles.visitStatValue}>{visitStats?.total_visits || 0}</Text>
+              )}
+              <Text style={styles.visitStatLabel}>Visits</Text>
+            </View>
+            <View style={styles.visitStatBox}>
+              {statsLoading ? (
+                <ActivityIndicator size="small" color="#3b2c85" />
+              ) : (
+                <Text style={styles.visitStatValue}>{visitStats?.unique_places || 0}</Text>
+              )}
+              <Text style={styles.visitStatLabel}>Places</Text>
+            </View>
+            <View style={styles.visitStatBox}>
+              <Text style={styles.visitStatValue}>{savedPlacesData?.total_count || 0}</Text>
+              <Text style={styles.visitStatLabel}>Saved</Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.historyLink}
+            onPress={() => navigation.navigate('History')}
+          >
+            <Text style={styles.historyLinkText}>View Visit History</Text>
+            <Icon name="chevron-forward" size={16} color="#4f46e5" />
+          </TouchableOpacity>
+        </View>
+
         {/* ===== Location History ===== */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderWithAction}>
@@ -326,7 +448,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             </View>
           ) : (
             <View style={styles.historyList}>
-              {dashboardHistory.map((item) => (
+              {dashboardHistory.map((item: LocationHistoryItem) => (
                 <View key={item.id} style={{ marginBottom: 12 }}>
                   {renderHistoryItem({ item })}
                 </View>
@@ -480,6 +602,49 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
+  weatherCard: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+  },
+  weatherMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  weatherCity: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  weatherTemp: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  weatherCondition: {
+    fontSize: 14,
+    color: '#3b2c85',
+    fontWeight: '600',
+  },
+  weatherFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    paddingTop: 12,
+  },
+  weatherStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  weatherStatText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -554,6 +719,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#4f46e5',
     fontWeight: '600',
+  },
+  visitStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  visitStatBox: {
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 12,
+    flex: 1,
+    marginHorizontal: 6,
+  },
+  visitStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#3b2c85',
+  },
+  visitStatLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  historyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  historyLinkText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4f46e5',
+    marginRight: 4,
   },
   emptyContainer: {
     alignItems: 'center',

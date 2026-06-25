@@ -4,11 +4,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from 'react-native-geolocation-service';
-import { api } from '../services/api';
+import { locationService } from '../services/locationService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import CustomButton from '../components/Buttons/Button';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { weatherService } from '../services/weatherService';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Home'>;
@@ -20,40 +21,65 @@ export default function HomeScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const query = useQueryClient();
 
+  // Fetch weather data
+  const { data: weatherData } = useQuery({
+    queryKey: ['homeWeather'],
+    queryFn: () => weatherService.getForecast(),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const getWeatherIcon = (code: number, isDay: boolean = true) => {
+    switch (code) {
+      case 1000: return isDay ? 'sunny' : 'moon';
+      case 1003: return isDay ? 'partly-sunny' : 'cloudy-night';
+      case 1006:
+      case 1009: return 'cloudy';
+      case 1030:
+      case 1135: return 'water';
+      case 1063:
+      case 1180:
+      case 1183:
+      case 1186:
+      case 1189:
+      case 1192:
+      case 1195:
+      case 1240:
+      case 1243:
+      case 1246: return 'rainy';
+      case 1087:
+      case 1273:
+      case 1276:
+      case 1279:
+      case 1282: return 'thunderstorm';
+      case 1114:
+      case 1117:
+      case 1210:
+      case 1213:
+      case 1216:
+      case 1219:
+      case 1222:
+      case 1225:
+      case 1255:
+      case 1258: return 'snow';
+      default: return 'thermometer';
+    }
+  };
 
   const { mutate, isPending } = useMutation({
-    mutationFn: async ({
-      latitude,
-      longitude,
-      accuracy,
-    }: {
-      latitude: number;
-      longitude: number;
-      accuracy?: number;
-    }) => {
-      try {
-        // Sync with backend in the background
-        const response = await api.post('/locations/gps', {
-          latitude,
-          longitude,
-          accuracy,
-        });
-        return response.data;
-      } catch (error: any) {
-        console.log('Error saving location to backend:', error?.response ?? error);
-        throw error;
+    mutationFn: (data: { latitude: number; longitude: number; accuracy?: number }) =>
+      locationService.updateGps(data),
+    onSuccess: (res) => {
+      if (res.success) {
+        query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
+        query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+        query.invalidateQueries({ queryKey: ['locationsHistory'] });
+        navigation.navigate('Nearby');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update location');
       }
     },
-    onSuccess: () => {
-      refetch();
-      query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
-      query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
-      query.invalidateQueries({ queryKey: ['locationsHistory'] });
-      navigation.navigate('Nearby');
-    },
     onError: (error: any) => {
-      const message = error?.response?.data?.message || error.message || 'Failed to save location';
-      Alert.alert('Error', message);
+      Alert.alert('Error', error.message || 'An error occurred while updating location');
     },
   });
 
@@ -96,28 +122,78 @@ export default function HomeScreen({ navigation }: Props) {
     }
   };
 
-  const {data,isLoading,refetch}=useQuery({
-    queryKey:['GetSavedLocation'],
-    queryFn:async()=>{
+  const { data: latestLocation, isLoading: latestLoading, refetch: refetchLatest } = useQuery({
+    queryKey: ['GetLatestLocation'],
+    queryFn: async () => {
       try {
-      const response = await api.get('/locations/me');
-      const data = response?.data?.data;
+        const response = await locationService.getLatest();
+        const resData = response?.data;
 
-      
-      if (data && data.latitude && data.longitude) {
-        setLocation((prev) => prev || {
-          latitude: parseFloat(data.latitude),
-          longitude: parseFloat(data.longitude),
-          accuracy: parseInt(data.accuracy)
-        });
+        if (resData && resData.latitude !== undefined && resData.latitude !== null) {
+          const lat = typeof resData.latitude === 'string' ? parseFloat(resData.latitude) : resData.latitude;
+          const lng = typeof resData.longitude === 'string' ? parseFloat(resData.longitude) : resData.longitude;
+          
+          setLocation({
+            latitude: lat,
+            longitude: lng,
+            accuracy: resData.accuracy
+          });
+          return { latitude: lat, longitude: lng, accuracy: resData.accuracy };
+        }
+        return null;
+      } catch (error) {
+        console.log('No latest location found.');
+        return null;
       }
-       return data;
-    } catch (error) {
-      // Silently fail if GET API has no location, we fallback to device GPS
-      console.log('No saved location found.');
-    }
     },
-    staleTime:5*60*1000,
+    staleTime: 0, // Always get fresh latest location
+  });
+
+  const deleteLocationMutation = useMutation({
+    mutationFn: () => locationService.deleteCurrent(),
+    onSuccess: (res) => {
+      if (res.success) {
+        query.invalidateQueries({ queryKey: ['GetLatestLocation'] });
+        query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+        setLocation(null);
+        Alert.alert('Success', 'Current location cleared successfully');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to clear location');
+      }
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.message || 'An error occurred while clearing location');
+    },
+  });
+
+  const { data, isLoading: savedLoading } = useQuery({
+    queryKey: ['GetSavedLocation'],
+    queryFn: async () => {
+      try {
+        const response = await locationService.getMe();
+        const resData = response?.data;
+
+        if (resData && resData.latitude !== undefined && resData.latitude !== null && resData.longitude !== undefined && resData.longitude !== null) {
+          const lat = typeof resData.latitude === 'string' ? parseFloat(resData.latitude) : resData.latitude;
+          const lng = typeof resData.longitude === 'string' ? parseFloat(resData.longitude) : resData.longitude;
+          const acc = typeof resData.accuracy === 'string' ? parseInt(resData.accuracy) : resData.accuracy;
+
+          if (!location) {
+            setLocation({
+              latitude: lat,
+              longitude: lng,
+              accuracy: acc
+            });
+          }
+          return { latitude: lat, longitude: lng, accuracy: acc };
+        }
+        return null;
+      } catch (error) {
+        console.log('No saved location found.');
+        return null;
+      }
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
 
@@ -153,24 +229,59 @@ export default function HomeScreen({ navigation }: Props) {
   requestLocationPermission();
   }, []);
 
-  if (loading) {
+  if (loading && !location) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#4f46e5" />
-          <Text style={styles.loadingText}>Fetching Location...</Text>
+          <ActivityIndicator size="large" color="#3b2c85" />
+          <Text style={styles.loadingText}>Fetching your location...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (permissionGranted === false || !location) {
+  // Only show permission error if we have NO location data at all
+  if (permissionGranted === false && !location && !latestLoading && !savedLoading) {
     return (
       <SafeAreaView style={styles.safeAreaLoading}>
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Location permission is required to view the map.</Text>
+          <Icon name="location-outline" size={64} color="#ef4444" style={{ marginBottom: 20 }} />
+          <Text style={styles.errorText}>Location permission is required to fetch your current GPS position.</Text>
+          <Text style={[styles.errorText, { fontSize: 14, opacity: 0.8, marginTop: 8 }]}>
+            Please enable location services or set your location manually to continue.
+          </Text>
           <TouchableOpacity style={styles.retryButton} onPress={requestLocationPermission}>
             <Text style={styles.retryButtonText}>Retry Permission</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.retryButton, { marginTop: 12, backgroundColor: '#3b2c85' }]} 
+            onPress={() => navigation.navigate('SetManualLocation')}
+          >
+            <Text style={styles.retryButtonText}>Set Location Manually</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Fallback if everything finished but no location was found
+  if (!loading && !location && !latestLoading && !savedLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerContainer}>
+          <Icon name="map-outline" size={64} color="#d1d5db" style={{ marginBottom: 20 }} />
+          <Text style={[styles.errorText, { color: '#111827' }]}>No location data available.</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { marginTop: 20 }]} 
+            onPress={() => navigation.navigate('SetManualLocation')}
+          >
+            <Text style={styles.retryButtonText}>Set Location Manually</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.retryButton, { marginTop: 12, backgroundColor: '#f3f4f6' }]} 
+            onPress={requestLocationPermission}
+          >
+            <Text style={[styles.retryButtonText, { color: '#4b5563' }]}>Try GPS Again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -181,9 +292,28 @@ export default function HomeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Location</Text>
-        <TouchableOpacity>
-          <Icon name="settings-outline" size={24} color="#111827" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {weatherData?.data ? (
+            <TouchableOpacity 
+              style={styles.weatherPill}
+              onPress={() => navigation.navigate('Weather')}
+            >
+              <Icon 
+                name={getWeatherIcon(weatherData.data.weather?.condition_code, weatherData.data.weather?.is_day)} 
+                size={18} 
+                color="#3b2c85" 
+              />
+              <Text style={styles.weatherPillText}>{weatherData.data.temperature?.current_c?.toFixed(0)}°</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.weatherPill, { opacity: 0.6 }]}>
+              <ActivityIndicator size="small" color="#3b2c85" />
+            </View>
+          )}
+          <TouchableOpacity>
+            <Icon name="settings-outline" size={24} color="#111827" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.mapContainer}>
@@ -211,8 +341,28 @@ export default function HomeScreen({ navigation }: Props) {
 
       <View style={styles.cardContainer}>
         <View style={styles.cardHeader}>
-          <Icon name="location" size={24} color="#4f46e5" />
-          <Text style={styles.cardTitle}>Current Location</Text>
+          <View style={styles.cardHeaderLeft}>
+            <Icon name="location" size={24} color="#4f46e5" />
+            <Text style={styles.cardTitle}>Current Location</Text>
+          </View>
+          {location && (
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={() => {
+                Alert.alert(
+                  'Clear Location',
+                  'Are you sure you want to deactivate your current location?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Clear', style: 'destructive', onPress: () => deleteLocationMutation.mutate() }
+                  ]
+                );
+              }}
+              disabled={deleteLocationMutation.isPending}
+            >
+              <Icon name="trash-outline" size={20} color="#ef4444" />
+            </TouchableOpacity>
+          )}
         </View>
         
         <Text style={styles.addressText}>
@@ -267,6 +417,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  weatherPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  weatherPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3b2c85',
+  },
   mapContainer: {
     flex: 1,
   },
@@ -290,13 +461,21 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#111827',
     marginLeft: 8,
+  },
+  clearButton: {
+    padding: 4,
   },
   addressText: {
     fontSize: 15,

@@ -16,7 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import MapView, { PROVIDER_GOOGLE, Region, Marker } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { api } from '../services/api';
+import { locationService } from '../services/locationService';
 import Geolocation from 'react-native-geolocation-service';
 import Config from 'react-native-config';
 import axios from 'axios';
@@ -52,57 +52,51 @@ export default function SetManualLocationScreen({ navigation }: Props) {
     queryKey: ['GetSavedLocation'],
     queryFn: async () => {
       try {
-        const response = await api.get('/locations/me');
-        const data = response?.data?.data;
+        const response = await locationService.getMe();
+        const resData = response?.data;
 
-        if (data && data.latitude && data.longitude) {
+        if (resData && resData.latitude !== undefined && resData.latitude !== null && resData.longitude !== undefined && resData.longitude !== null) {
+          const lat = typeof resData.latitude === 'string' ? parseFloat(resData.latitude) : resData.latitude;
+          const lng = typeof resData.longitude === 'string' ? parseFloat(resData.longitude) : resData.longitude;
+          const acc = typeof resData.accuracy === 'string' ? parseInt(resData.accuracy) : resData.accuracy;
+
           setLocation({
-                latitude: parseFloat(data.latitude),
-                longitude: parseFloat(data.longitude),
-                accuracy: parseInt(data.accuracy),
-              });
+            latitude: lat,
+            longitude: lng,
+            accuracy: acc,
+          });
+          return { latitude: lat, longitude: lng, accuracy: acc };
         } else {
           fallbackToGPS();
         }
-         return data;
+        return null;
       } catch (error) {
         console.log('No saved location found, falling back to GPS.');
         fallbackToGPS();
+        return null;
       }
     },
     staleTime: 5 * 60 * 1000,
-    // refetchOnWindowFocus: false,
   });
 
   const { mutate, isPending } = useMutation({
-    mutationFn: async ({
-      latitude,
-      longitude,
-      label,
-    }: {
+    mutationFn: (data: {
       latitude: number;
       longitude: number;
       label: string;
-    }) => {
-      const response = await api.put('/locations/manual', {
-        latitude,
-        longitude,
-        label,
-      });
-      return response?.data;
-    },
-    onSuccess: () => {
-      refetch();
-      query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
-      query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
-      query.invalidateQueries({ queryKey: ['locationsHistory'] });
-      navigation.navigate('Nearby');
+    }) => locationService.updateManual(data),
+    onSuccess: (res) => {
+      if (res.success) {
+        query.invalidateQueries({ queryKey: ['NearbyPlaces'] });
+        query.invalidateQueries({ queryKey: ['GetSavedLocation'] });
+        query.invalidateQueries({ queryKey: ['locationsHistory'] });
+        navigation.navigate('Nearby');
+      } else {
+        Alert.alert('Error', res.message || 'Failed to update location');
+      }
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.message || error.message || 'Failed to update manual location';
-      Alert.alert('Error', message);
-      console.log('Error updating manual location', error?.response);
-      fallbackToGPS();
+      Alert.alert('Error', error.message || 'An error occurred while updating location');
     },
   });
 

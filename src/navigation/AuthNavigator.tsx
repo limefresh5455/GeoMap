@@ -14,6 +14,10 @@ import AllPhotosScreen from '../screens/AllPhotosScreen';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
 import AgentTravelChatScreen from '../screens/AgentTravelChatScreen';
 import CommuteScreen from '../screens/CommuteScreen';
+import HistoryScreen from '../screens/HistoryScreen';
+import SavedPlacesScreen from '../screens/SavedPlacesScreen';
+import WeatherScreen from '../screens/WeatherScreen';
+import ComparisonScreen from '../screens/ComparisonScreen';
 
 export type AuthStackParamList = {
   Initial: undefined;
@@ -38,7 +42,7 @@ export type AuthStackParamList = {
   } | undefined;
   AllPhotos: { photos?: string[] } | undefined;
   ChatDetail: {
-    sessionId: number;
+    sessionId: string | number;
     placeName?: string;
     placeAddress?: string;
     placeId?:string
@@ -50,6 +54,10 @@ export type AuthStackParamList = {
     destinationLat?: number;
     destinationLng?: number;
   } | undefined;
+  History: undefined;
+  SavedPlaces: undefined;
+  Weather: undefined;
+  Comparison: { placeIds: string[]; useBatch?: boolean };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -99,6 +107,10 @@ export default function AuthNavigator() {
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
       <Stack.Screen name="AgentTravelChat" component={AgentTravelChatScreen} />
       <Stack.Screen name="Commute" component={CommuteScreen} />
+      <Stack.Screen name="History" component={HistoryScreen} />
+      <Stack.Screen name="SavedPlaces" component={SavedPlacesScreen} />
+      <Stack.Screen name="Weather" component={WeatherScreen} />
+      <Stack.Screen name="Comparison" component={ComparisonScreen} />
     </Stack.Navigator>
   );
 }

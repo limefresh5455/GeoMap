@@ -11,10 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../services/api';
+import { placeService } from '../services/placeService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -115,7 +116,10 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
   const avatarColor = getAvatarColor(sessionId);
   const initials = getPlaceInitials(placeName);
   const [visible,setVisible]=useState(false);
-const query =useQueryClient();
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [newTitle, setNewTitle] = useState(placeName);
+  const query =useQueryClient();
+
   // Fetch session detail
   const {
     data: sessionData,
@@ -124,15 +128,30 @@ const query =useQueryClient();
   } = useQuery({
     queryKey: ['ChatSession', sessionId],
     queryFn: async () => {
-      const response = await api.get(`/places/qa/sessions/${sessionId}`);
-      const raw = response?.data;
-      console.log('ChatDetail API response:', JSON.stringify(raw));
-      // Handle potential wrapping: direct object, or nested in .data/.session
-      const session = raw?.messages ? raw : (raw?.data || raw?.session || raw);
-      return session as SessionDetail;
+      const response = await placeService.getSession(sessionId as string);
+      return response.session as any;
     },
     enabled: !!sessionId,
     staleTime: 30 * 1000,
+  });
+
+  useEffect(() => {
+    if (sessionData?.title) {
+      setNewTitle(sessionData.title);
+    }
+  }, [sessionData?.title]);
+
+  const updateSessionMutation = useMutation({
+    mutationFn: (title: string) => placeService.updateSession(sessionId as string, { title }),
+    onSuccess: () => {
+      setIsEditModalVisible(false);
+      query.invalidateQueries({ queryKey: ['ChatSession', sessionId] });
+      query.invalidateQueries({ queryKey: ['AllChats'] });
+      Alert.alert('Success', 'Chat title updated');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to update title');
+    },
   });
 
   const messages = sessionData?.messages || [];
@@ -147,14 +166,13 @@ const query =useQueryClient();
   // Send a new message
   const { mutate: sendMessage, isPending: isSending } = useMutation({
     mutationFn: async (content: string) => {
-      const response = await api.post(`/places/${sessionData?.place?.place_id}/question`, {
+      return await placeService.askQuestion(sessionData?.place?.place_id!, {
         question: content,
-        session_id: sessionId
+        session_id: sessionId as string
       });
-      return response?.data;
     },
     onSuccess: (data) => {
-      const assistantText = data?.answer || data?.content || data?.message || data?.response || "";
+      const assistantText = data?.answer || "";
       
       if (assistantText) {
         simulateStreaming(assistantText);
@@ -169,7 +187,6 @@ const query =useQueryClient();
           error?.response?.data?.detail ||
           error?.response?.data?.message || ""
       Alert.alert('Error Sending Message', errorMessage);
-      console.log('Send message error:', errorMessage);
     },
   });
 
@@ -190,7 +207,6 @@ const query =useQueryClient();
     const characters = fullText.split('');
     let charIndex = 0;
 
-    // Stream by characters for a smoother effect, or words for speed
     const interval = setInterval(() => {
       if (charIndex < characters.length) {
         currentText += characters[charIndex];
@@ -209,29 +225,27 @@ const query =useQueryClient();
   };
 
   const handleDeleteSession = (sessionId: any) => {
-  Alert.alert(
-    'Delete Session',
-    'Are you sure you want to delete this session?',
-    [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteSession(sessionId),
-      },
-    ]
-  );
-};
+    Alert.alert(
+      'Delete Session',
+      'Are you sure you want to delete this session?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteSession(sessionId),
+        },
+      ]
+    );
+  };
 
   // delete session
   const {mutate:deleteSession,isPending:iseDeleting} =useMutation({
    mutationFn:async(sessionId:any)=>{   
-           const response= await api.delete(`places/qa/sessions?session_ids=${sessionId}`);
-           return response?.data;
-   
+           return await placeService.deleteSession(sessionId);
    },
    onSuccess:()=>{
     query.invalidateQueries({ queryKey: ['AllChats'] });
@@ -240,7 +254,6 @@ const query =useQueryClient();
    onError:(error:any)=>{
     const errorMessage = error?.response?.data?.detail || error?.response?.data?.message ||"";
     Alert.alert('Error Deleting Chat', errorMessage);
-    console.log('Delete chat error:', errorMessage);
    }
   })
 
@@ -386,10 +399,54 @@ const query =useQueryClient();
               navigation.navigate('PlaceDetails' as any,{placeId:placeId ,placeName:placeName ,placeAddress:placeAddress} )
             }
           }} title="View Place Details" />
+          <Menu.Item onPress={() => {
+            setVisible(false);
+            setIsEditModalVisible(true);
+          }} title="Edit Chat Title" />
           <Menu.Item onPress={() => {handleDeleteSession(sessionId)}} title="Delete Chat" />
         </Menu>
       
       </View>
+
+      {/* Edit Title Modal */}
+      <Modal
+        visible={isEditModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Chat Title</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newTitle}
+              onChangeText={setNewTitle}
+              placeholder="Enter new title"
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={() => setIsEditModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalSaveButton}
+                onPress={() => updateSessionMutation.mutate(newTitle)}
+                disabled={updateSessionMutation.isPending}
+              >
+                {updateSessionMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Chat Messages */}
       <KeyboardAvoidingView
@@ -698,5 +755,60 @@ const styles = StyleSheet.create({
   emptyChatText: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  modalInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  modalSaveButton: {
+    backgroundColor: '#3b2c85',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

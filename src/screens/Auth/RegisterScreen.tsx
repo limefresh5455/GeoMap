@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/AuthNavigator';
-import { api } from '../../services/api';
+import { authService } from '../../services/authService';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useMutation } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,17 +32,16 @@ export default function RegisterScreen({ navigation }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   
 
-   const {mutate,isPending} = useMutation({
-    mutationFn: async ({email,password,full_name}:{email:string,password:string,full_name:string}) => {
+  const { mutate, isPending } = useMutation({
+    mutationFn: async ({ email, password, full_name }: { email: string, password: string, full_name: string }) => {
       try {
-          const response = await api.post('/auth/signup',{full_name,email,password});
-          console.log(response,"RESPONSE=====================================================")
-          return response?.data
-        } catch (error: any) {
-          const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || 'An error occurred during registration. Please try again.';
-          Alert.alert('Registration Failed', errorMessage);
-          throw error;
-        }
+        const response = await authService.signup({ full_name, email, password });
+        return response;
+      } catch (error: any) {
+        const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || 'An error occurred during registration. Please try again.';
+        Alert.alert('Registration Failed', errorMessage);
+        throw error;
+      }
     },
     onSuccess: (data, variables) => {
       navigation.replace('OTPVerification', { email: variables.email, password: variables.password });
