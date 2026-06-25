@@ -588,10 +588,13 @@ export interface DeleteVisitResponse {
 
 export interface VisitStatsResponse {
   success: boolean;
-  total_visits: number;
-  unique_places: number;
-  by_category: any;
-  by_month: any;
+  message: string;
+  data: {
+    total_visits: number;
+    unique_places: number;
+    by_category: any;
+    by_month: any;
+  } | null;
   timestamp: string;
 }
 

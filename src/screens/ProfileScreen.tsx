@@ -59,15 +59,17 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   });
 
   // 2.5 Fetch Visit Stats
-  const { data: visitStats, isLoading: statsLoading } = useQuery({
+  const { data: visitStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['visitStats'],
     queryFn: () => placeService.getVisitStats(),
+    staleTime: 0,
   });
 
   // 2.6 Fetch Saved Places Count
-  const { data: savedPlacesData } = useQuery({
+  const { data: savedPlacesData, refetch: refetchSavedCount } = useQuery({
     queryKey: ['savedPlacesCount'],
     queryFn: () => placeService.listSaved(1, 1), // Just get the first page to get total_count
+    staleTime: 0,
   });
 
   // 2.7 Fetch Weather
@@ -145,8 +147,8 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const handleRefreshAll = () => {
     refetchMe();
     refetchHistory();
-    queryClient.invalidateQueries({ queryKey: ['visitStats'] });
-    queryClient.invalidateQueries({ queryKey: ['savedPlacesCount'] });
+    refetchStats();
+    refetchSavedCount();
     queryClient.invalidateQueries({ queryKey: ['profileWeather'] });
   };
 
@@ -400,7 +402,9 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               {statsLoading ? (
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
-                <Text style={styles.visitStatValue}>{visitStats?.total_visits || 0}</Text>
+                <Text style={styles.visitStatValue}>
+                  {visitStats?.data?.total_visits ?? (visitStats as any)?.total_visits ?? 0}
+                </Text>
               )}
               <Text style={styles.visitStatLabel}>Visits</Text>
             </View>
@@ -408,12 +412,16 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               {statsLoading ? (
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
-                <Text style={styles.visitStatValue}>{visitStats?.unique_places || 0}</Text>
+                <Text style={styles.visitStatValue}>
+                  {visitStats?.data?.unique_places ?? (visitStats as any)?.unique_places ?? 0}
+                </Text>
               )}
               <Text style={styles.visitStatLabel}>Places</Text>
             </View>
             <View style={styles.visitStatBox}>
-              <Text style={styles.visitStatValue}>{savedPlacesData?.total_count || 0}</Text>
+              <Text style={styles.visitStatValue}>
+                {savedPlacesData?.total_count ?? (savedPlacesData as any)?.data?.total_count ?? savedPlacesData?.data?.length ?? 0}
+              </Text>
               <Text style={styles.visitStatLabel}>Saved</Text>
             </View>
           </View>

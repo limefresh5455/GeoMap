@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { placeService } from '../services/placeService';
@@ -22,10 +24,15 @@ type Props = {
 
 export default function HistoryScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
+  const [editingVisit, setEditingVisit] = useState<any>(null);
+  const [editRating, setEditRating] = useState(5);
+  const [editReview, setEditReview] = useState('');
+  const [editMood, setEditMood] = useState('');
   
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['visitStats'],
     queryFn: () => placeService.getVisitStats(),
+    staleTime: 0,
   });
 
   const { data: visits, isLoading, error, refetch } = useQuery({
@@ -33,6 +40,18 @@ export default function HistoryScreen({ navigation }: Props) {
     queryFn: async () => {
       const response = await placeService.listVisits();
       return response.data || [];
+    },
+  });
+
+  const updateVisitMutation = useMutation({
+    mutationFn: ({ visitId, data }: { visitId: number; data: any }) => placeService.updateVisit(visitId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['visitsHistory'] });
+      setEditingVisit(null);
+      Alert.alert('Success', 'Visit log updated');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.response?.data?.message || 'Failed to update visit');
     },
   });
 
@@ -47,6 +66,25 @@ export default function HistoryScreen({ navigation }: Props) {
       Alert.alert('Error', error?.response?.data?.message || 'Failed to delete visit');
     },
   });
+
+  const handleEditVisit = (visit: any) => {
+    setEditingVisit(visit);
+    setEditRating(visit.rating_given || 5);
+    setEditReview(visit.review_text || '');
+    setEditMood(visit.mood || '');
+  };
+
+  const handleUpdateSubmit = () => {
+    if (!editingVisit) return;
+    updateVisitMutation.mutate({
+      visitId: editingVisit.id,
+      data: {
+        rating_given: editRating,
+        review_text: editReview,
+        mood: editMood,
+      },
+    });
+  };
 
   const handleDeleteVisit = (visitId: number) => {
     Alert.alert(
@@ -66,9 +104,14 @@ export default function HistoryScreen({ navigation }: Props) {
     >
       <View style={styles.visitHeader}>
         <Text style={styles.placeName}>{item.display_name || 'Unknown Place'}</Text>
-        <TouchableOpacity onPress={() => handleDeleteVisit(item.id)}>
-          <Icon name="trash-outline" size={18} color="#ef4444" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => handleEditVisit(item)} style={styles.actionButton}>
+            <Icon name="create-outline" size={18} color="#3b2c85" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDeleteVisit(item.id)} style={styles.actionButton}>
+            <Icon name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
       <View style={styles.dateRow}>
         <Text style={styles.visitDate}>
@@ -111,29 +154,22 @@ export default function HistoryScreen({ navigation }: Props) {
       {stats && (
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats.total_visits}</Text>
+            <Text style={styles.statValue}>
+              {stats?.data?.total_visits ?? (stats as any)?.total_visits ?? 0}
+            </Text>
             <Text style={styles.statLabel}>Total Visits</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{stats.unique_places}</Text>
+            <Text style={styles.statValue}>
+              {stats?.data?.unique_places ?? (stats as any)?.unique_places ?? 0}
+            </Text>
             <Text style={styles.statLabel}>Unique Places</Text>
           </View>
         </View>
       )}
 
-      {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#3b2c85" />
-        </View>
-      ) : error ? (
-        <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Failed to load history</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : visits && visits.length > 0 ? (
+      {visits && visits.length > 0 ? (
         <FlatList
           data={visits}
           keyExtractor={(item) => item.id.toString()}
@@ -141,12 +177,76 @@ export default function HistoryScreen({ navigation }: Props) {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
-      ) : (
+      ) : !isLoading && (
         <View style={styles.centerContainer}>
           <Icon name="time-outline" size={64} color="#d1d5db" />
           <Text style={styles.emptyText}>No visits logged yet</Text>
         </View>
       )}
+
+      {/* Edit Visit Modal */}
+      <Modal
+        visible={!!editingVisit}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditingVisit(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Visit</Text>
+            
+            <Text style={styles.label}>Rating</Text>
+            <View style={styles.modalStars}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setEditRating(star)}>
+                  <Icon 
+                    name={star <= editRating ? "star" : "star-outline"} 
+                    size={32} 
+                    color="#f59e0b" 
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Review (Optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="How was your visit?"
+              value={editReview}
+              onChangeText={setEditReview}
+              multiline
+            />
+
+            <Text style={styles.label}>Mood (Optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. Fun, Romantic, Quiet"
+              value={editMood}
+              onChangeText={setEditMood}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setEditingVisit(null)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={handleUpdateSubmit}
+                disabled={updateVisitMutation.isPending}
+              >
+                {updateVisitMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Update</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -233,6 +333,14 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  actionButton: {
+    padding: 4,
+  },
   dateRow: {
     marginBottom: 8,
   },
@@ -306,5 +414,75 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#9ca3af',
     marginTop: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  modalStars: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  textInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
+    color: '#111827',
+    minHeight: 44,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  submitButton: {
+    flex: 1,
+    backgroundColor: '#3b2c85',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
