@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
-import MapView, { PROVIDER_GOOGLE, Marker, Circle } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, Marker, Circle, Polygon } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { locationService } from '../services/locationService';
@@ -79,6 +79,33 @@ const DEFAULT_FILTERS: FilterState = {
 };
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const getCirclePoints = (center: { latitude: number; longitude: number }, radius: number, numPoints: number = 64) => {
+  const points = [];
+  const earthRadius = 6371000; // meters
+  const lat = (center.latitude * Math.PI) / 180;
+  const lon = (center.longitude * Math.PI) / 180;
+  const dByR = radius / earthRadius;
+
+  for (let i = 0; i <= numPoints; i++) {
+    const bearing = (i * 2 * Math.PI) / numPoints;
+    const lat2 = Math.asin(
+      Math.sin(lat) * Math.cos(dByR) +
+        Math.cos(lat) * Math.sin(dByR) * Math.cos(bearing)
+    );
+    const lon2 =
+      lon +
+      Math.atan2(
+        Math.sin(bearing) * Math.sin(dByR) * Math.cos(lat),
+        Math.cos(dByR) - Math.sin(lat) * Math.sin(lat2)
+      );
+    points.push({
+      latitude: (lat2 * 180) / Math.PI,
+      longitude: (lon2 * 180) / Math.PI,
+    });
+  }
+  return points;
+};
 
 const getWeatherIcon = (code: number, isDay: boolean = true) => {
   switch (code) {
@@ -217,6 +244,19 @@ export default function NearbyScreen({ navigation }: Props) {
       setAutocompleteResults([]);
     }
   }, [autocompleteData]);
+
+  // Adjust map view when radius changes
+  useEffect(() => {
+    if (userLocation && mapRef.current) {
+      const delta = (activeFilters.radius * 2) / 111320;
+      mapRef.current.animateToRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: delta * 1.2,
+        longitudeDelta: delta * 1.2,
+      }, 1000);
+    }
+  }, [activeFilters.radius, userLocation]);
 
   const handleAutocompleteSelect = (prediction: AutocompletePrediction) => {
     setSearchQuery(prediction.main_text);
@@ -434,18 +474,16 @@ export default function NearbyScreen({ navigation }: Props) {
           zoomEnabled={true}>
           {userLocation && (
             <>
-              <Circle
-                center={userLocation}
-                radius={activeFilters.radius * 0.6}
-                fillColor="rgba(59, 44, 133, 0.2)"
+              <Polygon
+                coordinates={getCirclePoints(userLocation, activeFilters.radius * 0.6)}
+                fillColor="rgba(59, 44, 133, 0.15)"
                 strokeColor="transparent"
               />
-              <Circle
-                center={userLocation}
-                radius={activeFilters.radius}
-                fillColor="rgba(59, 44, 133, 0.06)"
-                strokeColor="rgba(59, 44, 133, 0.2)"
-                strokeWidth={1}
+              <Polygon
+                coordinates={getCirclePoints(userLocation, activeFilters.radius)}
+                fillColor="rgba(59, 44, 133, 0.05)"
+                strokeColor="rgba(59, 44, 133, 0.3)"
+                strokeWidth={1.5}
               />
               <Marker coordinate={userLocation} anchor={{ x: 0.5, y: 0.5 }}>
                 <View style={styles.centerDotGlow}>

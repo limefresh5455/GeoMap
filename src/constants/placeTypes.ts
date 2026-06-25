@@ -219,9 +219,9 @@ export const RANK_OPTIONS = [
 export const RADIUS_OPTIONS = [
   { value: 200, label: '200m' },
   { value: 500, label: '500m' },
-  // { value: 1000, label: '1 km' },
-  // { value: 2000, label: '2 km' },
-  // { value: 5000, label: '5 km' },
+  { value: 1000, label: '1 km' },
+  { value: 2000, label: '2 km' },
+  { value: 5000, label: '5 km' },
 ] as const;
 
 // Max result count options
