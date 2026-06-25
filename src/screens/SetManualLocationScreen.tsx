@@ -240,8 +240,6 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-
-      {/* Map takes the full screen behind everything */}
       <View style={styles.mapContainer}>
         {location ? (
           <MapView
@@ -281,8 +279,6 @@ export default function SetManualLocationScreen({ navigation }: Props) {
           </View>
         )}
       </View>
-
-      {/* Floating Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -291,7 +287,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
           <Icon name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Set Manual Location</Text>
-        <View style={{ width: 24 }} /> {/* Spacer to center the title */}
+        <View style={{ width: 24 }} />
       </View>
 
       {/* Floating Search Bar */}
@@ -320,8 +316,6 @@ export default function SetManualLocationScreen({ navigation }: Props) {
           </TouchableOpacity>
         ) : null}
       </View>
-
-      {/* Autocomplete Predictions List */}
       {predictions.length > 0 ? (
         <View style={styles.predictionsContainer}>
           <FlatList
@@ -342,15 +336,13 @@ export default function SetManualLocationScreen({ navigation }: Props) {
                   style={styles.predictionIcon}
                 />
                 <Text style={styles.predictionText} numberOfLines={2}>
-                  {item.description}
+                  {`${item.description}`}
                 </Text>
               </TouchableOpacity>
             )}
           />
         </View>
       ) : null}
-
-      {/* Floating Bottom Card */}
       <View style={styles.bottomCard}>
         <View style={styles.locationHeader}>
           <View style={styles.iconContainer}>
@@ -365,13 +357,10 @@ export default function SetManualLocationScreen({ navigation }: Props) {
           </Text>
           {location && (
             <Text style={styles.coordsText}>
-              {location.latitude.toFixed(4)}° N, {location.longitude.toFixed(4)}
-              ° E
+              {`${location.latitude.toFixed(4)}° N, ${location.longitude.toFixed(4)}° E`}
             </Text>
           )}
         </View>
-
-        {/* Label Input */}
         <View style={styles.labelInputContainer}>
           <Icon name="pricetag-outline" size={18} color="#6b7280" style={styles.labelIcon} />
           <TextInput
@@ -381,11 +370,11 @@ export default function SetManualLocationScreen({ navigation }: Props) {
             value={label}
             onChangeText={setLabel}
           />
-          {label.length > 0 && (
+          {label.length > 0 ? (
             <TouchableOpacity onPress={() => setLabel('')}>
               <Icon name="close-circle" size={18} color="#9ca3af" />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         <CustomButton
