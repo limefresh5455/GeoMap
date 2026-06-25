@@ -309,7 +309,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   if (isAnyLoading) {
     return (
-      <SafeAreaView style={styles.loaderContainer}>
+      <SafeAreaView style={styles.loaderContainer} edges={['top']}>
         <ActivityIndicator size="large" color="#3b2c85" />
         <Text style={styles.loaderText}>Loading Profile...</Text>
       </SafeAreaView>
@@ -320,7 +320,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const dashboardHistory = historyList.slice(0, 3);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Profile</Text>
@@ -537,7 +537,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         transparent={false}
         onRequestClose={() => setHistoryModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <SafeAreaView style={styles.modalContainer} edges={['top']}>
           <View style={styles.modalHeader}>
             <TouchableOpacity
               onPress={() => setHistoryModalVisible(false)}

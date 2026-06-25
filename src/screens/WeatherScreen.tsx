@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { weatherService } from '../services/weatherService';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -102,7 +102,7 @@ export default function WeatherScreen({ navigation }: Props) {
 
   if (weatherLoading || aqiLoading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top']}>
         <ActivityIndicator size="large" color="#3b2c85" />
         <Text style={styles.loadingText}>Fetching weather data...</Text>
       </SafeAreaView>
@@ -128,7 +128,7 @@ export default function WeatherScreen({ navigation }: Props) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>

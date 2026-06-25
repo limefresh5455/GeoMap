@@ -224,7 +224,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   if (loading && !location) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#3b2c85" />
           <Text style={styles.loadingText}>Fetching your location...</Text>
@@ -260,7 +260,7 @@ export default function HomeScreen({ navigation }: Props) {
   // Fallback if everything finished but no location was found
   if (!loading && !location && !latestLoading && !savedLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.centerContainer}>
           <Icon name="map-outline" size={64} color="#d1d5db" style={{ marginBottom: 20 }} />
           <Text style={[styles.errorText, { color: '#111827' }]}>No location data available.</Text>
@@ -282,7 +282,7 @@ export default function HomeScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Location</Text>
         <View style={styles.headerRight}>
@@ -402,7 +402,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
-    paddingTop:30,
     backgroundColor: '#ffffff',
   },
   headerTitle: {

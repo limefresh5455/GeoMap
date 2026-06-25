@@ -6,11 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   Image,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { comparisonService } from '../services/comparisonService';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -126,7 +126,7 @@ export default function CompareBasicScreen({ navigation, route }: Props) {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top']}>
         <ActivityIndicator size="large" color="#3b2c85" />
         <Text style={styles.loadingText}>Loading detailed comparison...</Text>
       </SafeAreaView>
@@ -135,7 +135,7 @@ export default function CompareBasicScreen({ navigation, route }: Props) {
 
   if (error || (data && !data.success)) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer} edges={['top']}>
         <Icon name="alert-circle-outline" size={64} color="#ef4444" />
         <Text style={[styles.loadingText, { color: '#ef4444', marginTop: 16 }]}>
           {data?.message || 'Failed to load detailed comparison'}
@@ -151,7 +151,7 @@ export default function CompareBasicScreen({ navigation, route }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>

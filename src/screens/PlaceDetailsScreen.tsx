@@ -24,7 +24,7 @@ import {AuthStackParamList} from '../navigation/AuthNavigator';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {placeService} from '../services/placeService';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import Config from 'react-native-config';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
@@ -35,9 +35,8 @@ type Props = {
   route: RouteProp<AuthStackParamList, 'PlaceDetails'>;
 };
 
-
-
 export default function PlaceDetailsScreen({navigation, route}: Props) {
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const {
     placeId,
@@ -204,7 +203,7 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         translucent
         backgroundColor="transparent"
@@ -212,7 +211,7 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
       />
 
       {/* ===== ZONE 1: Floating Header Buttons ===== */}
-      <View style={styles.headerOverlay}>
+      <View style={[styles.headerOverlay, { top: insets.top + 10 }]}>
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => navigation.goBack()}>
@@ -524,7 +523,6 @@ const styles = StyleSheet.create({
   // ===== Zone 1: Floating Header =====
   headerOverlay: {
     position: 'absolute',
-    top: 50,
     left: 20,
     right: 20,
     zIndex: 10,

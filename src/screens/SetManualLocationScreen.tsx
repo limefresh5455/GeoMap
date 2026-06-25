@@ -228,7 +228,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#4f46e5" />
           <Text style={styles.loadingText}>Fetching Location...</Text>
@@ -238,7 +238,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <View style={styles.mapContainer}>
         {location ? (

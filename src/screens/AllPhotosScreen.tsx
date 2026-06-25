@@ -18,7 +18,7 @@ export default function AllPhotosScreen({ navigation, route }: Props) {
   const displayPhotos = photos.length > 0 ? [...photos, ...photos, ...photos] : [];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header */}

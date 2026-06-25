@@ -405,7 +405,7 @@ export default function NearbyScreen({ navigation }: Props) {
 
   if (locationLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b2c85" />
           <Text style={styles.loadingText}>Getting your location...</Text>
