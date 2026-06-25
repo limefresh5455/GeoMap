@@ -51,13 +51,11 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   });
 
   // 2. Fetch Location History
-  const { data: historyList = [], isLoading: historyLoading, error: historyError, refetch: refetchHistory } = useQuery({
+  const { data: historyData, isLoading: historyLoading, error: historyError, refetch: refetchHistory } = useQuery({
     queryKey: ['locationsHistory'],
-    queryFn: async () => {
-      const res = await locationService.getHistory();
-      return res.data?.items || [];
-    },
+    queryFn: () => locationService.getHistory(),
   });
+  const historyList = (historyData as any)?.data?.items || [];
 
   // 2.5 Fetch Visit Stats
   const { data: visitStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
@@ -73,6 +71,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     staleTime: 0,
   });
 
+  // 2.6.5 Fetch Visits Count (from list instead of stats if requested)
+  const { data: visitsData, refetch: refetchVisitsCount } = useQuery({
+    queryKey: ['visitsCount'],
+    queryFn: () => placeService.listVisits(1, 1),
+    staleTime: 0,
+  });
+
   // 2.7 Fetch Weather
   const { data: weatherData, isLoading: weatherLoading } = useQuery({
     queryKey: ['profileWeather'],
@@ -83,8 +88,10 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     useCallback(() => {
       refetchStats();
       refetchSavedCount();
+      refetchVisitsCount();
+      refetchHistory();
       return () => {};
-    }, [refetchStats, refetchSavedCount])
+    }, [refetchStats, refetchSavedCount, refetchVisitsCount, refetchHistory])
   );
 
   // 3. Logout Mutation
@@ -158,6 +165,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     refetchHistory();
     refetchStats();
     refetchSavedCount();
+    refetchVisitsCount();
     queryClient.invalidateQueries({ queryKey: ['profileWeather'] });
   };
 
@@ -443,7 +451,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
                 <Text style={styles.visitStatValue}>
-                  {visitStats?.data?.total_visits ?? (visitStats as any)?.total_visits ?? (visitStats as any)?.totalVisits ?? 0}
+                  {visitsData?.total_count ?? visitsData?.data?.length ?? visitStats?.data?.total_visits ?? 0}
                 </Text>
               )}
               <Text style={styles.visitStatLabel}>Visits</Text>
@@ -453,7 +461,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 <ActivityIndicator size="small" color="#3b2c85" />
               ) : (
                 <Text style={styles.visitStatValue}>
-                  {visitStats?.data?.unique_places ?? (visitStats as any)?.unique_places ?? (visitStats as any)?.uniquePlaces ?? 0}
+                  {(historyData as any)?.total_count ?? (historyData as any)?.data?.total_count ?? historyList.length ?? visitStats?.data?.unique_places ?? 0}
                 </Text>
               )}
               <Text style={styles.visitStatLabel}>Places</Text>
