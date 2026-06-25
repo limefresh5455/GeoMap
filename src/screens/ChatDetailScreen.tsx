@@ -245,7 +245,7 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
   // delete session
   const {mutate:deleteSession,isPending:iseDeleting} =useMutation({
    mutationFn:async(sessionId:any)=>{   
-           return await placeService.deleteSession(sessionId);
+           return await placeService.deleteSessions([sessionId]);
    },
    onSuccess:()=>{
     query.invalidateQueries({ queryKey: ['AllChats'] });
