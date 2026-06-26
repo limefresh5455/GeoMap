@@ -38,6 +38,7 @@ export default function RegisterScreen({ navigation }: Props) {
         const response = await authService.signup({ full_name, email, password });
         return response;
       } catch (error: any) {
+        console.log(error?.response,"ERROR==========")
         const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || 'An error occurred during registration. Please try again.';
         Alert.alert('Registration Failed', errorMessage);
         throw error;

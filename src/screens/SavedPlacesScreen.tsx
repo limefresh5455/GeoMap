@@ -241,12 +241,12 @@ export default function SavedPlacesScreen({ navigation }: Props) {
                 <Icon name="git-compare-outline" size={18} color="#3b2c85" />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#3b2c85' }}>Compare</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              {/* <TouchableOpacity 
                 style={[styles.nearbyToggle, showNearbyOnly && styles.nearbyToggleActive]}
                 onPress={() => setShowNearbyOnly(!showNearbyOnly)}
               >
                 <Icon name="navigate-outline" size={20} color={showNearbyOnly ? "#ffffff" : "#3b2c85"} />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </>
           )}
         </View>

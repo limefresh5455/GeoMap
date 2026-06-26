@@ -17,6 +17,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Share,
 } from 'react-native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RouteProp} from '@react-navigation/native';
@@ -171,6 +172,23 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
 
   const viewabilityConfig = useRef({viewAreaCoveragePercentThreshold: 50}).current;
 
+  const onShare = async () => {
+    try {
+      const shareUrl = google_maps_uri || data?.google_maps_uri;
+      const title = placeName || data?.display_name || 'Checkout this place';
+      
+      const message = `${title}  ${shareUrl ? `\n${shareUrl}` : ''}`;
+      
+      await Share.share({
+        message,
+        url: shareUrl || undefined,
+        title,
+      });
+    } catch (error: any) {
+      Alert.alert(error.message);
+    }
+  };
+
   const renderStars = (ratingValue: number = 0) => {
     const fullStars = Math.floor(ratingValue);
     const hasHalfStar = ratingValue % 1 >= 0.5;
@@ -241,7 +259,9 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
             style={styles.iconButton}>
             <Icon name="navigate" size={20} color="#111827" />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.iconButton, {marginLeft: 12}]}>
+          <TouchableOpacity 
+            onPress={onShare}
+            style={[styles.iconButton, {marginLeft: 12}]}>
             <Icon name="share-social-outline" size={24} color="#111827" />
           </TouchableOpacity>
         </View>

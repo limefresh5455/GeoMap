@@ -202,9 +202,9 @@ const ChatScreen = () => {
                 <Icon name="airplane" size={20} color="#ffffff" />
                 <Text style={styles.agentButtonText}>AI Agent</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.searchButton}>
+              {/* <TouchableOpacity style={styles.searchButton}>
                 <Icon name="search-outline" size={22} color="#ffffff" />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </>
           )}
         </View>
