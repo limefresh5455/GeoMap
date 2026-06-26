@@ -58,6 +58,30 @@ export default function LoginScreen({ navigation, route }: Props) {
           error?.response?.data?.detail ||
           error?.response?.data?.message ||
           'An error occurred during login. Please try again.';
+        
+        // If login fails because account is inactive (not verified), redirect to OTP screen
+        if (errorMessage.toLowerCase().includes('inactive')) {
+          Alert.alert(
+            'Account Inactive',
+            'Your account is not verified. Would you like us to send a new verification code?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Resend OTP', 
+                onPress: async () => {
+                  try {
+                    await authService.resendOtp({ email });
+                    navigation.navigate('OTPVerification', { email, password });
+                  } catch (err: any) {
+                    Alert.alert('Error', err?.response?.data?.message || 'Failed to resend OTP');
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+
         Alert.alert('Login Failed', errorMessage);
         throw error;
       }
@@ -68,7 +92,44 @@ export default function LoginScreen({ navigation, route }: Props) {
   });
 
   const handleSubmit = async () => {
-    mutate({ email, password });
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password');
+      return;
+    }
+
+    try {
+      // First check verification status
+      const status = await authService.getVerificationStatus(email);
+      
+      if (status.success && status.data.is_registered && !status.data.email_verified) {
+        // User is registered but not verified
+        Alert.alert(
+          'Email Not Verified',
+          'Your email is not verified. Would you like us to send a new verification code?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Resend OTP', 
+              onPress: async () => {
+                try {
+                  await authService.resendOtp({ email });
+                  navigation.navigate('OTPVerification', { email, password });
+                } catch (err: any) {
+                  Alert.alert('Error', err?.response?.data?.message || 'Failed to resend OTP');
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      // Proceed with login if verified or if registration status check fails (fallback to login)
+      mutate({ email, password });
+    } catch (error) {
+      // If verification status check fails, try to login anyway (maybe the endpoint is down or user doesn't exist)
+      mutate({ email, password });
+    }
   };
 
   return (

@@ -37,4 +37,9 @@ export const locationService = {
     const response = await api.delete<APIResponse>('/locations/current');
     return response.data;
   },
+
+  deleteHistoryEntry: async (historyId: number): Promise<APIResponse> => {
+    const response = await api.delete<APIResponse>(`/locations/history/${historyId}`);
+    return response.data;
+  },
 };

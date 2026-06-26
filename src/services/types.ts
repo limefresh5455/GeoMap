@@ -43,6 +43,21 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface ResendOTPRequest {
+  email: string;
+}
+
+export interface VerificationStatusResponse {
+  success: boolean;
+  message: string;
+  data: {
+    is_registered: boolean;
+    email_verified: boolean;
+    full_name?: string | null;
+  };
+  timestamp: string;
+}
+
 export interface RefreshRequest {
   refresh_token: string;
 }

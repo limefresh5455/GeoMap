@@ -122,7 +122,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   // 4. Delete Location History Mutation
   const deleteHistoryMutation = useMutation({
-    mutationFn: (locationId: number) => locationService.deleteCurrent(), // Note: API spec might need locationId param
+    mutationFn: (locationId: number) => locationService.deleteHistoryEntry(locationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locationsHistory'] });
       queryClient.invalidateQueries({ queryKey: ['GetSavedLocation'] });

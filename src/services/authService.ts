@@ -7,6 +7,8 @@ import {
   LoginRequest,
   UserResponse,
   APIResponse,
+  VerificationStatusResponse,
+  ResendOTPRequest,
 } from './types';
 
 export const authService = {
@@ -31,8 +33,15 @@ export const authService = {
     return response.data?.data || response.data;
   },
 
-  resendOtp: async (email: string): Promise<APIResponse> => {
-    const response = await api.post<APIResponse>('/auth/resend-otp', { email });
+  resendOtp: async (data: ResendOTPRequest): Promise<APIResponse> => {
+    const response = await api.post<APIResponse>('/auth/resend-otp', data);
+    return response.data;
+  },
+
+  getVerificationStatus: async (email: string): Promise<VerificationStatusResponse> => {
+    const response = await api.get<VerificationStatusResponse>('/auth/verification-status', {
+      params: { email },
+    });
     return response.data;
   },
 

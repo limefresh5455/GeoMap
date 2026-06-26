@@ -118,7 +118,7 @@ export default function OTPVerificationScreen({ navigation, route }: Props) {
   const resendMutation = useMutation({
     mutationFn: async () => {
       try {
-        const response = await authService.resendOtp(email);
+        const response = await authService.resendOtp({ email });
         return response;
       } catch (error: any) {
         const errorMessage =
