@@ -48,6 +48,8 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   const query = useQueryClient();
   const mapRef = useRef<MapView>(null);
 
+
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['GetSavedLocation'],
     queryFn: async () => {
@@ -60,25 +62,19 @@ export default function SetManualLocationScreen({ navigation }: Props) {
           const lng = typeof resData.longitude === 'string' ? parseFloat(resData.longitude) : resData.longitude;
           const acc = typeof resData.accuracy === 'string' ? parseInt(resData.accuracy) : resData.accuracy;
 
-          setLocation({
-            latitude: lat,
-            longitude: lng,
-            accuracy: acc,
-          });
           return { latitude: lat, longitude: lng, accuracy: acc };
-        } else {
-          fallbackToGPS();
         }
         return null;
       } catch (error) {
-        console.log('No saved location found, falling back to GPS.');
-        fallbackToGPS();
+        console.log('No saved location found, falling back to GPS/default.');
         return null;
       }
     },
     staleTime: 5 * 60 * 1000,
   });
 
+    console.log(location,'location',data)
+    
   const { mutate, isPending } = useMutation({
     mutationFn: (data: {
       latitude: number;
@@ -189,7 +185,7 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   };
 
   const fallbackToGPS = async () => {
-    const fallbackCoords = { latitude: 28.6139, longitude: 77.2090, accuracy: 10 };
+    const fallbackCoords = { latitude: 20.5937, longitude: 78.9629, accuracy: 10 };
     try {
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
@@ -220,6 +216,18 @@ export default function SetManualLocationScreen({ navigation }: Props) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (data) {
+      setLocation({
+        latitude: data.latitude,
+        longitude: data.longitude,
+        accuracy: data.accuracy,
+      });
+    } else if (!isLoading) {
+      fallbackToGPS();
+    }
+  }, [data, isLoading]);
 
   useEffect(() => {
     // Cleanup debounce timer on unmount to prevent memory leaks
