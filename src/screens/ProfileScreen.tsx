@@ -513,6 +513,27 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           )}
         </View>
 
+        {/* ===== Settings & Actions ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="settings-outline" size={22} color="#3b2c85" />
+            <Text style={styles.sectionTitle}>Account Settings</Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.settingsItem}
+            onPress={() => navigation.navigate('ChangePassword')}
+          >
+            <View style={styles.settingsItemLeft}>
+              <View style={[styles.settingsIconContainer, { backgroundColor: '#eef2ff' }]}>
+                <Icon name="lock-closed-outline" size={20} color="#4f46e5" />
+              </View>
+              <Text style={styles.settingsItemText}>Change Password</Text>
+            </View>
+            <Icon name="chevron-forward" size={18} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
+
         {/* ===== Logout Button ===== */}
         <TouchableOpacity
           style={styles.logoutButton}
@@ -873,6 +894,29 @@ const styles = StyleSheet.create({
   deleteIconButton: {
     padding: 8,
     marginLeft: 4,
+  },
+  settingsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  settingsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingsIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingsItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
   },
   logoutButton: {
     flexDirection: 'row',

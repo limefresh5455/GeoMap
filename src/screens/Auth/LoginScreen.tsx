@@ -194,9 +194,12 @@ export default function LoginScreen({ navigation, route }: Props) {
               </View>
             </View>
 
-            {/* <TouchableOpacity style={styles.forgotPassword}>
+            <TouchableOpacity 
+              style={styles.forgotPassword}
+              onPress={() => navigation.navigate('ForgotPassword', { email })}
+            >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
 
             <CustomButton
               title="Login"

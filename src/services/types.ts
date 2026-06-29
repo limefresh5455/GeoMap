@@ -66,6 +66,44 @@ export interface LogoutRequest {
   refresh_token?: string | null;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+  email: string;
+  otp_expires_in_seconds: number;
+}
+
+export interface VerifyResetOTPRequest {
+  email: string;
+  otp: string;
+}
+
+export interface VerifyResetOTPResponse {
+  message: string;
+  reset_token: string;
+  expires_in_seconds: number;
+}
+
+export interface ResetPasswordRequest {
+  password: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
+export interface ChangePasswordRequest {
+  old_password: string;
+  new_password: string;
+}
+
+export interface ChangePasswordResponse {
+  message: string;
+}
+
 export interface MessageResponse {
   message: string;
 }

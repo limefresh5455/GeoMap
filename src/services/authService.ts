@@ -9,6 +9,14 @@ import {
   APIResponse,
   VerificationStatusResponse,
   ResendOTPRequest,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
+  VerifyResetOTPRequest,
+  VerifyResetOTPResponse,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
 } from './types';
 
 export const authService = {
@@ -52,6 +60,30 @@ export const authService = {
 
   refresh: async (refreshToken: string): Promise<TokenResponse> => {
     const response = await api.post<TokenResponse>('/auth/refresh', { refresh_token: refreshToken });
+    return response.data;
+  },
+
+  forgotPassword: async (data: ForgotPasswordRequest): Promise<ForgotPasswordResponse> => {
+    const response = await api.post<ForgotPasswordResponse>('/auth/forgot-password', data);
+    return response.data;
+  },
+
+  verifyResetOtp: async (data: VerifyResetOTPRequest): Promise<VerifyResetOTPResponse> => {
+    const response = await api.post<VerifyResetOTPResponse>('/auth/verify-reset-otp', data);
+    return response.data;
+  },
+
+  resetPassword: async (data: ResetPasswordRequest, resetToken: string): Promise<ResetPasswordResponse> => {
+    const response = await api.post<ResetPasswordResponse>('/auth/reset-password', data, {
+      headers: {
+        'X-Reset-Token': resetToken,
+      },
+    });
+    return response.data;
+  },
+
+  changePassword: async (data: ChangePasswordRequest): Promise<ChangePasswordResponse> => {
+    const response = await api.post<ChangePasswordResponse>('/auth/change-password', data);
     return response.data;
   },
 };

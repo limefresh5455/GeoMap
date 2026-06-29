@@ -6,6 +6,8 @@ import InitialScreen from '../screens/InitialScreen';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
 import OTPVerificationScreen from '../screens/Auth/OTPVerificationScreen';
+import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
+import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import HomeTabNavigator from './HomeTabNavigator';
 import SetManualLocationScreen from '../screens/SetManualLocationScreen';
@@ -25,6 +27,8 @@ export type AuthStackParamList = {
   Initial: undefined;
   Login: { email?: string; password?: string } | undefined;
   Register: undefined;
+  ForgotPassword: { email?: string } | undefined;
+  ChangePassword: undefined;
   OTPVerification: { email: string; password?: string };
   Home: undefined;
   Nearby: undefined;
@@ -99,6 +103,8 @@ export default function AuthNavigator() {
       <Stack.Screen name="Initial" component={InitialScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="Nearby" component={HomeTabNavigator} />
