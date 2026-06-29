@@ -88,7 +88,8 @@ export interface VerifyResetOTPResponse {
 }
 
 export interface ResetPasswordRequest {
-  password: string;
+  new_password: string;
+  confirm_password:string;
 }
 
 export interface ResetPasswordResponse {
@@ -98,6 +99,7 @@ export interface ResetPasswordResponse {
 export interface ChangePasswordRequest {
   old_password: string;
   new_password: string;
+  confirm_password:string;
 }
 
 export interface ChangePasswordResponse {

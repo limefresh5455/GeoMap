@@ -74,7 +74,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       if (newPassword !== confirmPassword) {
         throw new Error('Passwords do not match');
       }
-      return await authService.resetPassword({ password: newPassword }, resetToken);
+      return await authService.resetPassword({ confirm_password:confirmPassword, new_password:newPassword }, resetToken);
     },
     onSuccess: () => {
       Alert.alert('Success', 'Password reset successfully', [
@@ -82,6 +82,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
       ]);
     },
     onError: (error: any) => {
+      console.log(error?.response,"Error======")
       const detail = error?.response?.data?.detail;
       const errorMessage = Array.isArray(detail)
         ? detail.map((d: any) => `${d.loc.join('.')}: ${d.msg}`).join('\n')

@@ -38,6 +38,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
       return await authService.changePassword({
         old_password: oldPassword,
         new_password: newPassword,
+        confirm_password:confirmPassword
       });
     },
     onSuccess: async () => {
@@ -64,13 +65,16 @@ export default function ChangePasswordScreen({ navigation }: Props) {
       );
     },
     onError: (error: any) => {
+      console.log(error?.response,"errorr========================")
       const detail = error?.response?.data?.detail;
       const errorMessage = Array.isArray(detail)
         ? detail.map((d: any) => `${d.loc.join('.')}: ${d.msg}`).join('\n')
         : typeof detail === 'string'
         ? detail
         : error?.response?.data?.message || 'Failed to change password';
+      
       Alert.alert('Error', errorMessage);
+        throw new Error(errorMessage)
     },
   });
 
