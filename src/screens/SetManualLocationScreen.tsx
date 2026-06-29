@@ -189,12 +189,14 @@ export default function SetManualLocationScreen({ navigation }: Props) {
   };
 
   const fallbackToGPS = async () => {
+    const fallbackCoords = { latitude: 28.6139, longitude: 77.2090, accuracy: 10 };
     try {
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          setLocation(prev => prev || fallbackCoords);
           setLoading(false);
           return;
         }
@@ -207,12 +209,14 @@ export default function SetManualLocationScreen({ navigation }: Props) {
         },
         error => {
           console.log('GPS Error:', error.message);
+          setLocation(prev => prev || fallbackCoords);
           setLoading(false);
         },
         { enableHighAccuracy: false, timeout: 15000, maximumAge: 10000 },
       );
     } catch (err) {
       console.warn('GPS Permission Error:', err);
+      setLocation(prev => prev || fallbackCoords);
       setLoading(false);
     }
   };

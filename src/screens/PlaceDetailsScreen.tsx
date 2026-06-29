@@ -155,6 +155,7 @@ export default function PlaceDetailsScreen({navigation, route}: Props) {
       }
     },
     onError: (error: any) => {
+      console.log(error,"response===============")
       const errorMessage =
         error?.response?.data?.detail ||
         error?.response?.data?.message || "";

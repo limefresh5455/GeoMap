@@ -21,6 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Menu } from "react-native-paper"
+import Markdown from 'react-native-markdown-display';
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'ChatDetail'>;
   route: RouteProp<AuthStackParamList, 'ChatDetail'>;
@@ -338,13 +339,23 @@ export default function ChatDetailScreen({ navigation, route }: Props) {
               styles.messageBubble,
               isUser ? styles.userBubble : styles.assistantBubble,
             ]}>
-            <Text
-              style={[
-                styles.messageText,
-                isUser ? styles.userMessageText : styles.assistantMessageText,
-              ]}>
-              {item.content}
-            </Text>
+            {isUser ? (
+              <Text
+                style={[
+                  styles.messageText,
+                  styles.userMessageText,
+                ]}>
+                {item.content}
+              </Text>
+            ) : (
+              <Markdown
+                style={{
+                  body: [styles.messageText, styles.assistantMessageText, { marginVertical: 0 }],
+                  paragraph: { marginTop: 0, marginBottom: 0 },
+                }}>
+                {item.content}
+              </Markdown>
+            )}
             <Text
               style={[
                 styles.messageTime,

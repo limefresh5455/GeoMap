@@ -76,7 +76,8 @@ const ChatScreen = () => {
     queryKey: ['AllChats'],
     queryFn: async () => {
       const response = await placeService.listSessions();
-      return (response?.sessions || []) as any[];
+      console.log('ListSessions response:', JSON.stringify(response));
+      return (response?.sessions || response?.data || response?.items || []) as any[];
     },
     staleTime: 60 * 1000,
   });
@@ -100,9 +101,9 @@ const ChatScreen = () => {
     } else {
       navigation.navigate('ChatDetail', {
         sessionId: session.session_id,
-        placeName: session.place.name,
-        placeAddress: session.place.address,
-        placeId: session.place.place_id,
+        placeName: session.place?.name || 'Unknown Place',
+        placeAddress: session.place?.address || '',
+        placeId: session.place?.place_id,
       });
     }
   };
@@ -130,10 +131,11 @@ const ChatScreen = () => {
   };
 
   const renderSessionItem = ({ item }: { item: QASession }) => {
-    const initials = getPlaceInitials(item.place.name);
-    const avatarColor = getAvatarColor(item.session_id as any);
-    const timeAgo = formatTimeAgo(item.last_message_at);
-    const isSelected = selectedSessions.includes(item.session_id);
+    const placeName = item?.place?.name || 'Unknown Place';
+    const initials = getPlaceInitials(placeName);
+    const avatarColor = getAvatarColor(item?.session_id ? parseInt(item.session_id.toString().replace(/\D/g, '') || '0') : 0);
+    const timeAgo = item?.last_message_at ? formatTimeAgo(item.last_message_at) : '';
+    const isSelected = selectedSessions.includes(item?.session_id);
 
     return (
       <TouchableOpacity
@@ -157,13 +159,13 @@ const ChatScreen = () => {
         <View style={styles.sessionContent}>
           <View style={styles.sessionTopRow}>
             <Text style={styles.placeName} numberOfLines={1}>
-              {item?.place?.name}
+              {placeName}
             </Text>
             {!isSelectMode && <Text style={styles.timeText}>{timeAgo}</Text>}
           </View>
           <View style={styles.sessionBottomRow}>
             <Text style={styles.lastMessage} numberOfLines={1}>
-              {item?.last_message}
+              {item?.last_message || ''}
             </Text>
           </View>
         </View>

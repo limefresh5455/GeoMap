@@ -19,6 +19,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../navigation/AuthNavigator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Markdown from 'react-native-markdown-display';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'AgentTravelChat'>;
@@ -184,13 +185,23 @@ export default function AgentTravelChatScreen({ navigation }: Props) {
             styles.messageBubble,
             isUser ? styles.userBubble : styles.assistantBubble,
           ]}>
-          <Text
-            style={[
-              styles.messageText,
-              isUser ? styles.userMessageText : styles.assistantMessageText,
-            ]}>
-            {item.content}
-          </Text>
+          {isUser ? (
+            <Text
+              style={[
+                styles.messageText,
+                isUser ? styles.userMessageText : styles.assistantMessageText,
+              ]}>
+              {item.content}
+            </Text>
+          ) : (
+            <Markdown
+              style={{
+                body: [styles.messageText, styles.assistantMessageText, { marginVertical: 0 }],
+                paragraph: { marginTop: 0, marginBottom: 0 },
+              }}>
+              {item.content}
+            </Markdown>
+          )}
         </View>
       </View>
     );
