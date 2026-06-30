@@ -676,6 +676,43 @@ export interface VisitStatsResponse {
 }
 
 /**
+ * Payment Types
+ */
+export interface CreatePaymentIntentRequest {
+  plan_id: string;
+}
+
+export interface CreatePaymentIntentResponse {
+  success: boolean;
+  message: string;
+  data: {
+    client_secret: string;
+    payment_intent_id: string;
+    amount: number;
+    currency: string;
+  };
+}
+
+export interface ConfirmPaymentRequest {
+  payment_intent_id: string;
+}
+
+export interface CreditPlan {
+  id: string;
+  name: string;
+  credits: number;
+  price: number;
+  currency: string;
+  description: string;
+}
+
+export interface ListPlansResponse {
+  success: boolean;
+  message: string;
+  data: CreditPlan[];
+}
+
+/**
  * Comparison Types
  */
 export interface ComparePlacesRequest {

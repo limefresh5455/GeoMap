@@ -395,9 +395,17 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
         {/* ===== Credits Balance ===== */}
         <View style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Icon name="wallet-outline" size={22} color="#3b2c85" />
-            <Text style={styles.sectionTitle}>Credit Balance</Text>
+          <View style={styles.sectionHeaderWithAction}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Icon name="wallet-outline" size={22} color="#3b2c85" />
+              <Text style={styles.sectionTitle}>Credit Balance</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.buyCreditsButton}
+              onPress={() => navigation.navigate('Plans')}
+            >
+              <Text style={styles.buyCreditsText}>Buy Credits</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.creditStatsContainer}>
@@ -743,6 +751,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#4f46e5',
+  },
+  buyCreditsButton: {
+    backgroundColor: '#3b2c85',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  buyCreditsText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   creditStatsContainer: {
     flexDirection: 'row',
