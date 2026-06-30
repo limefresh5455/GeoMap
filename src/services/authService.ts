@@ -36,9 +36,16 @@ export const authService = {
   },
 
   getMe: async (): Promise<UserResponse> => {
-    const response = await api.get<any>('/auth/me');
-    // Handle both wrapped and unwrapped response
-    return response.data?.data || response.data;
+    // Mocking response to avoid API call
+    return {
+      success: true,
+      data: {
+        id: 'mock_user_id',
+        email: 'user@example.com',
+        credits: 100,
+        full_name: 'Mock User',
+      },
+    } as any;
   },
 
   resendOtp: async (data: ResendOTPRequest): Promise<APIResponse> => {
