@@ -679,18 +679,19 @@ export interface VisitStatsResponse {
  * Payment Types
  */
 export interface CreatePaymentIntentRequest {
-  plan_id: string;
+  package: string;
+  amount_inr:number;
 }
 
 export interface CreatePaymentIntentResponse {
   success: boolean;
-  message: string;
-  data: {
+  // message: string;
+  // data: {
     client_secret: string;
     payment_intent_id: string;
     amount: number;
     currency: string;
-  };
+  // };
 }
 
 export interface ConfirmPaymentRequest {
@@ -698,18 +699,16 @@ export interface ConfirmPaymentRequest {
 }
 
 export interface CreditPlan {
-  id: string;
-  name: string;
+  inr: number;
   credits: number;
-  price: number;
   currency: string;
-  description: string;
+  label: string;
 }
 
 export interface ListPlansResponse {
   success: boolean;
   message: string;
-  data: CreditPlan[];
+  packages: CreditPlan[];
 }
 
 /**
@@ -864,3 +863,21 @@ export interface CompareRecommendResponse {
   total_places_compared: number;
   timestamp: string;
 }
+
+export interface Transaction {
+  id: number;
+  amount_inr: number;
+  amount_usd: number;
+  exchange_rate: number;
+  credits_purchased: number;
+  status: string;
+  created_at: string;
+  completed_at: string;
+}
+
+export interface PaymentHistoryResponse {
+  success: boolean;
+  message?: string;
+  transactions: Transaction[];
+}
+

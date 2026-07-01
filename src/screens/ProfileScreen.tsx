@@ -335,13 +335,15 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           <View style={styles.avatarGradient}>
             <Text style={styles.avatarText}>{avatarChar}</Text>
           </View>
-          <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileEmail}>{displayEmail}</Text>
-          {meData?.created_at && (
-            <Text style={styles.joinedText}>
-              Member since {new Date(meData.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}
-            </Text>
-          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.profileName} numberOfLines={1} ellipsizeMode="tail">{displayName}</Text>
+            <Text style={styles.profileEmail} numberOfLines={1} ellipsizeMode="tail">{displayEmail}</Text>
+            {meData?.created_at && (
+              <Text style={styles.joinedText}>
+                Member since {new Date(meData.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* ===== Weather Card ===== */}
@@ -631,7 +633,10 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   profileCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    columnGap: 20,
+    rowGap: 20,
     backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 24,

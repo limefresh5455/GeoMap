@@ -72,7 +72,11 @@ export default function HomeScreen({ navigation }: Props) {
       }
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'An error occurred while updating location');
+      console.log(error?.response,"Error===================")
+       const errorMessage =
+          error?.response?.data?.detail ||
+          error?.response?.data?.message || 'An error occurred while updating location';
+      Alert.alert('Error', errorMessage);
     },
   });
 
